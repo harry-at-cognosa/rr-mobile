@@ -2174,13 +2174,13 @@ function initTouchControls() {
         if (joystickInstance) joystickInstance.destroy();
         joystickInstance = nipplejs.create({
             zone: document.getElementById('tc-joystick-zone'),
-            mode: 'static',
-            position: { left: '50%', top: '50%' },
+            mode: 'dynamic',
             color: '#0f0',
-            size: 120,
-            threshold: 0.15,
-            fadeTime: 100,
-            restOpacity: 0.5
+            size: 200,
+            threshold: 0.08,
+            fadeTime: 150,
+            restOpacity: 0.4,
+            catchDistance: 200
         });
 
         joystickInstance.on('move', (evt, data) => {
