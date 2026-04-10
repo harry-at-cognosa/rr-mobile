@@ -23,12 +23,13 @@ canvas {
 }
 
 /* ====== MOBILE TOUCH CONTROLS CSS ====== */
-html, body {
+html, body, canvas {
     touch-action: none;
     -webkit-touch-callout: none;
     -webkit-user-select: none;
     user-select: none;
     overscroll-behavior: none;
+    -webkit-text-size-adjust: 100%;
 }
 
 #touch-controls {
@@ -1962,11 +1963,18 @@ function drawBriefing() {
     ctx.fillText('Enemy Forces: ' + G.mission.enemyBaseHP + ' HP base | Intel: ' + Math.round(G.mission.aggression * 100) + '% aggression', CW/2, CH/2 + 30);
     ctx.fillText('Your Resources: $' + G.mission.startMoney + ' | Base HP: ' + G.mission.playerBaseHP, CW/2, CH/2 + 50);
 
-    // Blinking "Press SPACE"
+    // Blinking prompt
     if (Math.floor(G.frame / 30) % 2 === 0) {
         ctx.fillStyle = '#0ff';
         ctx.font = '14px monospace';
-        ctx.fillText('Press SPACE to begin mission', CW/2, CH/2 + 90);
+        ctx.fillText(isMobile ? 'TAP TO START' : 'Press SPACE to begin mission', CW/2, CH/2 + 90);
+    }
+
+    // Touch control hints on briefing (first mission only)
+    if (isMobile && G.mi === 0) {
+        ctx.fillStyle = '#686';
+        ctx.font = '11px monospace';
+        ctx.fillText('Touch left side for joystick \u2022 Buttons on right \u2022 SWAP HANDS to switch', CW/2, CH/2 + 120);
     }
 }
 
@@ -2404,7 +2412,25 @@ function initTouchControls() {
         stNext.classList.toggle('visible', G.state === 'missionComplete');
     }
 
-    // Prevent default touch on canvas to avoid scrolling
+    // Prevent ALL zoom/scroll gestures (Safari ignores viewport meta)
+    document.addEventListener('touchstart', (e) => {
+        if (e.touches.length > 1) e.preventDefault();
+    }, { passive: false });
+    document.addEventListener('touchmove', (e) => {
+        if (e.touches.length > 1) e.preventDefault();
+    }, { passive: false });
+    // Safari-specific: block pinch-zoom gesture events entirely
+    document.addEventListener('gesturestart', (e) => e.preventDefault(), { passive: false });
+    document.addEventListener('gesturechange', (e) => e.preventDefault(), { passive: false });
+    document.addEventListener('gestureend', (e) => e.preventDefault(), { passive: false });
+    // Prevent double-tap zoom
+    let lastTouchEnd = 0;
+    document.addEventListener('touchend', (e) => {
+        const now = Date.now();
+        if (now - lastTouchEnd < 300) e.preventDefault();
+        lastTouchEnd = now;
+    }, { passive: false });
+    // Prevent canvas scrolling
     canvas.addEventListener('touchstart', (e) => e.preventDefault(), { passive: false });
     canvas.addEventListener('touchmove', (e) => e.preventDefault(), { passive: false });
 }
