@@ -1,0 +1,2414 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<title>Rescue Rangers - Browser Clone</title>
+<style>
+* { margin: 0; padding: 0; box-sizing: border-box; }
+body {
+    background: #000;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    height: 100vh;
+    overflow: hidden;
+    font-family: 'Courier New', monospace;
+}
+canvas {
+    display: block;
+    image-rendering: pixelated;
+}
+
+/* ====== MOBILE TOUCH CONTROLS CSS ====== */
+html, body {
+    touch-action: none;
+    -webkit-touch-callout: none;
+    -webkit-user-select: none;
+    user-select: none;
+    overscroll-behavior: none;
+}
+
+#touch-controls {
+    position: fixed;
+    top: 0; left: 0; right: 0; bottom: 0;
+    pointer-events: none;
+    z-index: 10;
+    padding: env(safe-area-inset-top) env(safe-area-inset-right)
+             env(safe-area-inset-bottom) env(safe-area-inset-left);
+    display: none;
+    font-family: 'Courier New', monospace;
+}
+
+#tc-joystick-zone {
+    position: absolute;
+    left: 1.5vw;
+    top: 12vh;
+    width: 32vmin;
+    height: 32vmin;
+    pointer-events: auto;
+}
+
+#tc-hud-info {
+    position: absolute;
+    left: 1.5vw;
+    top: 2vh;
+    pointer-events: none;
+    color: #0f0;
+    font-size: 2.8vmin;
+    font-weight: bold;
+    line-height: 1.6;
+    text-shadow: 0 0 4px #000, 0 0 8px #000;
+}
+#tc-hud-info span { display: block; }
+#tc-hud-ammo { color: #8f8; font-size: 2.2vmin; }
+#tc-hud-missiles { color: #8f8; font-size: 2.2vmin; }
+
+#tc-left-buttons {
+    position: absolute;
+    left: 2vw;
+    bottom: 12vh;
+    display: flex;
+    gap: 1.5vmin;
+    pointer-events: auto;
+}
+
+#tc-action-buttons {
+    position: absolute;
+    right: 2vw;
+    top: 6vh;
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    grid-template-rows: repeat(2, 1fr);
+    gap: 1.2vmin;
+    pointer-events: auto;
+}
+
+.tc-btn {
+    width: 12vmin;
+    height: 12vmin;
+    border-radius: 50%;
+    border: 2.5px solid #0f0;
+    background: rgba(0, 255, 0, 0.10);
+    color: #0f0;
+    font-family: 'Courier New', monospace;
+    font-size: 3vmin;
+    font-weight: bold;
+    pointer-events: auto;
+    -webkit-tap-highlight-color: transparent;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    will-change: transform;
+    transition: background 0.08s;
+    padding: 0;
+    margin: 0;
+    outline: none;
+    cursor: pointer;
+}
+
+.tc-btn.pressed {
+    background: rgba(0, 255, 0, 0.35);
+    border-color: #8f8;
+    transform: scale(0.93);
+}
+
+.tc-btn.tc-deploy {
+    border-color: #ff0;
+    color: #ff0;
+    background: rgba(255, 255, 0, 0.08);
+}
+.tc-btn.tc-deploy.pressed {
+    background: rgba(255, 255, 0, 0.30);
+    border-color: #ff8;
+}
+.tc-btn.tc-deploy.too-expensive {
+    opacity: 0.35;
+}
+
+.tc-btn.tc-util {
+    width: 14vmin;
+    height: 7vmin;
+    border-radius: 3vmin;
+    font-size: 2.3vmin;
+    border-color: #0ff;
+    color: #0ff;
+    background: rgba(0, 255, 255, 0.08);
+}
+.tc-btn.tc-util.pressed {
+    background: rgba(0, 255, 255, 0.30);
+}
+
+#tc-bomb-active {
+    border-color: #f80;
+    color: #f80;
+    background: rgba(255, 128, 0, 0.08);
+}
+#tc-bomb-active.pressed {
+    background: rgba(255, 128, 0, 0.35);
+    border-color: #fa0;
+}
+
+/* State overlay buttons */
+#tc-state-overlay {
+    position: absolute;
+    left: 0; right: 0;
+    bottom: 20vh;
+    text-align: center;
+    pointer-events: none;
+}
+.tc-state-btn {
+    display: none;
+    pointer-events: auto;
+    padding: 2.5vmin 6vmin;
+    border: 2px solid #0ff;
+    border-radius: 2vmin;
+    background: rgba(0, 255, 255, 0.15);
+    color: #0ff;
+    font-family: 'Courier New', monospace;
+    font-size: 3.5vmin;
+    font-weight: bold;
+    -webkit-tap-highlight-color: transparent;
+    cursor: pointer;
+    outline: none;
+}
+.tc-state-btn.visible {
+    display: inline-block;
+}
+.tc-state-btn:active {
+    background: rgba(0, 255, 255, 0.35);
+}
+
+/* Lefty mode: swap sides */
+#touch-controls.lefty #tc-joystick-zone { left: auto; right: 1.5vw; }
+#touch-controls.lefty #tc-hud-info { left: auto; right: 1.5vw; text-align: right; }
+#touch-controls.lefty #tc-left-buttons { left: auto; right: 2vw; }
+#touch-controls.lefty #tc-action-buttons { right: auto; left: 2vw; }
+
+/* Hand preference toggle */
+#tc-hand-toggle {
+    position: absolute;
+    bottom: 2vh;
+    right: 2vw;
+    pointer-events: auto;
+    font-size: 2vmin;
+    color: #888;
+    background: rgba(0,0,0,0.4);
+    border: 1px solid #555;
+    border-radius: 1vmin;
+    padding: 0.8vmin 1.5vmin;
+    font-family: 'Courier New', monospace;
+    cursor: pointer;
+    -webkit-tap-highlight-color: transparent;
+    outline: none;
+}
+#touch-controls.lefty #tc-hand-toggle { right: auto; left: 2vw; }
+</style>
+</head>
+<body>
+<canvas id="gameCanvas"></canvas>
+
+<!-- ====== MOBILE TOUCH CONTROLS HTML ====== -->
+<div id="touch-controls">
+    <div id="tc-joystick-zone"></div>
+
+    <div id="tc-hud-info">
+        <span id="tc-hud-money">$0</span>
+        <span id="tc-hud-ammo">AMMO: 0/0</span>
+        <span id="tc-hud-missiles">MISSILES: 0</span>
+    </div>
+
+    <div id="tc-action-buttons">
+        <button class="tc-btn tc-action" id="tc-shoot">S</button>
+        <button class="tc-btn tc-action" id="tc-missile">M</button>
+        <button class="tc-btn tc-deploy" id="tc-deploy1">1</button>
+        <button class="tc-btn tc-deploy" id="tc-deploy2">2</button>
+        <button class="tc-btn tc-action" id="tc-drop">E</button>
+        <button class="tc-btn tc-action" id="tc-pickup">F</button>
+        <button class="tc-btn tc-deploy" id="tc-deploy3">3</button>
+        <button class="tc-btn tc-deploy" id="tc-deploy4">4</button>
+    </div>
+
+    <div id="tc-left-buttons">
+        <button class="tc-btn tc-util" id="tc-pause">PAUSE</button>
+        <button class="tc-btn tc-util" id="tc-shop">SHOP</button>
+        <button class="tc-btn" id="tc-bomb-active">B</button>
+    </div>
+
+    <div id="tc-state-overlay">
+        <button class="tc-state-btn" id="tc-start">TAP TO START</button>
+        <button class="tc-state-btn" id="tc-restart">TAP TO RETRY</button>
+        <button class="tc-state-btn" id="tc-next">NEXT MISSION</button>
+        <button class="tc-state-btn" id="tc-resume">TAP TO RESUME</button>
+        <button class="tc-state-btn" id="tc-play-again">PLAY AGAIN</button>
+    </div>
+
+    <button id="tc-hand-toggle">SWAP HANDS</button>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/nipplejs@0.10.2/dist/nipplejs.min.js"></script>
+<script>
+// ============================================================
+// RESCUE RANGERS - Browser Clone (2026)
+// Based on the 1984 Apple IIe game "Rescue Raiders" by Sir-Tech
+// ============================================================
+
+const canvas = document.getElementById('gameCanvas');
+const ctx = canvas.getContext('2d');
+
+// --- DISPLAY ---
+const CW = 960, CH = 540;
+canvas.width = CW; canvas.height = CH;
+
+function resizeCanvas() {
+    const s = Math.min(window.innerWidth / CW, window.innerHeight / CH);
+    canvas.style.width = (CW * s) + 'px';
+    canvas.style.height = (CH * s) + 'px';
+}
+resizeCanvas();
+window.addEventListener('resize', resizeCanvas);
+
+// --- CONSTANTS ---
+const WORLD_W = 4800;
+const GROUND_Y = CH - 80;
+const GRAVITY = 0.12;
+const HELI_ACCEL = 0.35;
+const HELI_MAX_V = 4.5;
+const HELI_DAMP = 0.94;
+const BULLET_SPD = 9;
+const BOMB_VX = 2;
+
+const COSTS = { infantry: 50, tank: 200, aa: 175, van: 400 };
+
+const UNIT_STATS = {
+    infantry: { hp: 30, speed: 0.8, damage: 5, range: 80, fireRate: 30 },
+    tank:     { hp: 150, speed: 0.5, damage: 25, range: 200, fireRate: 60 },
+    aa:       { hp: 80, speed: 0.6, damage: 20, range: 250, fireRate: 45, antiAir: true },
+    van:      { hp: 200, speed: 0.4, damage: 500, range: 0, fireRate: 0 }
+};
+
+const ENEMY_STATS = {
+    infantry: { hp: 25, speed: 0.7, damage: 5, range: 80, fireRate: 35 },
+    tank:     { hp: 120, speed: 0.45, damage: 20, range: 180, fireRate: 65 },
+    aa:       { hp: 70, speed: 0.55, damage: 18, range: 230, fireRate: 50, antiAir: true }
+};
+
+const MISSIONS = [
+    { name: 'TRAINING GROUND', desc: 'Learn the basics', enemyBaseHP: 300, playerBaseHP: 500, startMoney: 1000, aggression: 0.3, spawnRate: 400, enemyTypes: ['infantry'], income: 75, bunkers: 1 },
+    { name: 'FIRST CONTACT', desc: 'Enemy deploys tanks', enemyBaseHP: 500, playerBaseHP: 500, startMoney: 800, aggression: 0.5, spawnRate: 350, enemyTypes: ['infantry','tank'], income: 85, bunkers: 2 },
+    { name: 'HEAVY RESISTANCE', desc: 'Anti-air batteries online', enemyBaseHP: 700, playerBaseHP: 500, startMoney: 1000, aggression: 0.6, spawnRate: 300, enemyTypes: ['infantry','tank','aa'], income: 100, bunkers: 2 },
+    { name: 'BEHIND ENEMY LINES', desc: 'Deep strike required', enemyBaseHP: 900, playerBaseHP: 450, startMoney: 1200, aggression: 0.7, spawnRate: 250, enemyTypes: ['infantry','tank','aa'], income: 110, bunkers: 3 },
+    { name: 'ALL-OUT WAR', desc: 'No holding back', enemyBaseHP: 1200, playerBaseHP: 500, startMoney: 1500, aggression: 0.8, spawnRate: 200, enemyTypes: ['infantry','tank','aa'], income: 125, bunkers: 3 },
+    { name: 'FINAL ASSAULT', desc: 'Destroy the enemy HQ', enemyBaseHP: 1500, playerBaseHP: 500, startMoney: 2000, aggression: 0.9, spawnRate: 180, enemyTypes: ['infantry','tank','aa'], income: 150, bunkers: 4 }
+];
+
+// --- AUDIO ---
+const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+
+function playSound(type) {
+    try {
+        const now = audioCtx.currentTime;
+        const g = audioCtx.createGain();
+        g.connect(audioCtx.destination);
+        if (type === 'shoot') {
+            const buf = audioCtx.createBuffer(1, 1200, audioCtx.sampleRate);
+            const d = buf.getChannelData(0);
+            for (let i = 0; i < d.length; i++) d[i] = (Math.random() * 2 - 1) * (1 - i / d.length);
+            const s = audioCtx.createBufferSource(); s.buffer = buf;
+            g.gain.setValueAtTime(0.08, now); g.gain.exponentialDecayTo && 0;
+            g.gain.setValueAtTime(0.08, now); g.gain.linearRampToValueAtTime(0, now + 0.04);
+            s.connect(g); s.start(now);
+        } else if (type === 'bomb') {
+            const o = audioCtx.createOscillator();
+            o.type = 'sine'; o.frequency.setValueAtTime(400, now); o.frequency.linearRampToValueAtTime(80, now + 0.3);
+            g.gain.setValueAtTime(0.12, now); g.gain.linearRampToValueAtTime(0, now + 0.3);
+            o.connect(g); o.start(now); o.stop(now + 0.3);
+        } else if (type === 'explode') {
+            const buf = audioCtx.createBuffer(1, audioCtx.sampleRate * 0.4, audioCtx.sampleRate);
+            const d = buf.getChannelData(0);
+            for (let i = 0; i < d.length; i++) d[i] = (Math.random() * 2 - 1) * Math.pow(1 - i / d.length, 2);
+            const s = audioCtx.createBufferSource(); s.buffer = buf;
+            g.gain.setValueAtTime(0.15, now); g.gain.linearRampToValueAtTime(0, now + 0.4);
+            s.connect(g); s.start(now);
+        } else if (type === 'buy') {
+            const o = audioCtx.createOscillator();
+            o.type = 'square'; o.frequency.setValueAtTime(600, now); o.frequency.setValueAtTime(800, now + 0.05);
+            g.gain.setValueAtTime(0.06, now); g.gain.linearRampToValueAtTime(0, now + 0.1);
+            o.connect(g); o.start(now); o.stop(now + 0.1);
+        } else if (type === 'damage') {
+            const o = audioCtx.createOscillator();
+            o.type = 'sawtooth'; o.frequency.setValueAtTime(120, now);
+            g.gain.setValueAtTime(0.1, now); g.gain.linearRampToValueAtTime(0, now + 0.15);
+            o.connect(g); o.start(now); o.stop(now + 0.15);
+        } else if (type === 'reload') {
+            const o = audioCtx.createOscillator();
+            o.type = 'sine'; o.frequency.setValueAtTime(400, now); o.frequency.linearRampToValueAtTime(800, now + 0.15);
+            g.gain.setValueAtTime(0.07, now); g.gain.linearRampToValueAtTime(0, now + 0.2);
+            o.connect(g); o.start(now); o.stop(now + 0.2);
+        }
+    } catch (e) {}
+}
+
+// --- MOBILE DETECTION ---
+const isMobile = ('ontouchstart' in window) ||
+                 (navigator.maxTouchPoints > 0) ||
+                 (window.matchMedia('(pointer: coarse)').matches);
+
+// --- GAME STATE ---
+let G = {};
+let keys = {};
+let fireHeld = false;
+let fireCooldown = 0;
+
+function initGame(mi) {
+    const m = MISSIONS[mi];
+    G = {
+        state: 'briefing', mi, mission: m,
+        cam: { x: WORLD_W - CW },
+        heli: {
+            x: WORLD_W - 200, y: GROUND_Y - 80,
+            vx: 0, vy: 0, facing: -1,
+            hp: 100, maxHP: 100,
+            ammo: 70, maxAmmo: 70,
+            bombs: 10, maxBombs: 10,
+            missiles: 2, maxMissiles: 2,
+            troops: 0, maxTroops: 4,
+            alive: true, onGround: false, atBase: false,
+            reloadTimer: 0, invTimer: 0, tilt: 0, rotorAng: 0,
+            muzzleFlash: 0
+        },
+        lives: 3, money: m.startMoney, score: 0, incomeTimer: 0,
+        playerBase: { x: WORLD_W - 150, hp: m.playerBaseHP, maxHP: m.playerBaseHP },
+        enemyBase: { x: 150, hp: m.enemyBaseHP, maxHP: m.enemyBaseHP },
+        playerUnits: [], enemyUnits: [],
+        bullets: [], bombs: [], explosions: [], particles: [],
+        enemySpawnTimer: 0, enemyHeliTimer: 600, enemyHelis: [],
+        bunkers: [], trees: [], stars: [], balloons: [],
+        frame: 0, showShop: false, missionCompleteTimer: 0,
+        parachuters: []
+    };
+
+    // Stars
+    for (let i = 0; i < 250; i++) {
+        G.stars.push({
+            x: Math.random() * WORLD_W * 1.5,
+            y: Math.random() * (GROUND_Y - 30),
+            sz: Math.random() * 2 + 0.5,
+            bright: Math.random() * 0.5 + 0.5,
+            tw: Math.random() * Math.PI * 2,
+            layer: Math.random() < 0.3 ? 0.3 : Math.random() < 0.6 ? 0.6 : 1
+        });
+    }
+
+    // Trees
+    for (let i = 0; i < 35; i++) {
+        G.trees.push({
+            x: 350 + Math.random() * (WORLD_W - 700),
+            h: 30 + Math.random() * 45,
+            w: 18 + Math.random() * 16,
+            shade: Math.random() * 0.3
+        });
+    }
+
+    // Bunkers
+    const bunkerCount = m.bunkers;
+    const spacing = (WORLD_W - 600) / (bunkerCount + 1);
+    for (let i = 0; i < bunkerCount; i++) {
+        G.bunkers.push({
+            x: 300 + spacing * (i + 1),
+            owner: 'neutral', // neutral, player, enemy
+            hp: 100, maxHP: 100,
+            fireTimer: 0,
+            captureTimer: 0,
+            captureBy: null
+        });
+    }
+
+    // Balloons (mission 3+)
+    if (mi >= 2) {
+        const nb = Math.min(mi, 4);
+        for (let i = 0; i < nb; i++) {
+            G.balloons.push({
+                x: 600 + i * ((WORLD_W - 1200) / nb) + Math.random() * 200,
+                y: GROUND_Y - 150 - Math.random() * 150,
+                hp: 40, alive: true, sway: Math.random() * Math.PI * 2
+            });
+        }
+    }
+}
+
+// --- INPUT ---
+document.addEventListener('keydown', (e) => {
+    const k = e.key.toLowerCase();
+    keys[k] = true;
+    keys[e.code] = true;
+
+    if (e.key === 'Escape') {
+        if (G.state === 'playing') G.state = 'paused';
+        else if (G.state === 'paused') G.state = 'playing';
+    }
+    if (k === 'r' && (G.state === 'defeated' || G.state === 'victory')) {
+        initGame(G.state === 'defeated' ? G.mi : 0);
+    }
+    if (e.key === ' ' && G.state === 'briefing') {
+        G.state = 'playing';
+        e.preventDefault();
+        if (audioCtx.state === 'suspended') audioCtx.resume();
+    }
+    if (e.key === ' ' && G.state === 'missionComplete') {
+        initGame(G.mi + 1);
+        e.preventDefault();
+    }
+    if (e.key === 'Tab') {
+        e.preventDefault();
+        if (G.state === 'playing') G.showShop = !G.showShop;
+    }
+    if (G.state === 'playing') {
+        if (e.key === '1') buyUnit('infantry');
+        if (e.key === '2') buyUnit('tank');
+        if (e.key === '3') buyUnit('aa');
+        if (e.key === '4') buyUnit('van');
+
+        // F: pick up infantry
+        if (k === 'f') pickupTroops();
+    }
+
+    if (['ArrowUp','ArrowDown','ArrowLeft','ArrowRight',' ','Tab'].includes(e.key)) e.preventDefault();
+});
+
+document.addEventListener('keyup', (e) => {
+    keys[e.key.toLowerCase()] = false;
+    keys[e.code] = false;
+});
+
+// --- PURCHASING ---
+function buyUnit(type) {
+    if (G.money >= COSTS[type]) {
+        G.money -= COSTS[type];
+        const s = UNIT_STATS[type];
+        G.playerUnits.push({
+            type, x: G.playerBase.x + 40, y: GROUND_Y,
+            hp: s.hp, maxHP: s.hp, speed: s.speed,
+            damage: s.damage, range: s.range,
+            fireRate: s.fireRate, fireTimer: 0,
+            dir: -1, antiAir: s.antiAir || false
+        });
+        playSound('buy');
+    }
+}
+
+function pickupTroops() {
+    if (!G.heli.alive) return;
+    const h = G.heli;
+    if (h.troops >= h.maxTroops) return;
+    if (h.y < GROUND_Y - 60) return; // must be low
+    for (let i = G.playerUnits.length - 1; i >= 0; i--) {
+        const u = G.playerUnits[i];
+        if (u.type === 'infantry' && Math.abs(u.x - h.x) < 50 && h.troops < h.maxTroops) {
+            G.playerUnits.splice(i, 1);
+            h.troops++;
+        }
+    }
+}
+
+// --- SPAWNING ---
+function spawnExplosion(x, y, size) {
+    G.explosions.push({ x, y, radius: 0, maxR: size || 30, alpha: 1, t: 0 });
+    for (let i = 0; i < 8; i++) {
+        const ang = Math.random() * Math.PI * 2;
+        const spd = 1 + Math.random() * 3;
+        G.particles.push({
+            x, y, vx: Math.cos(ang) * spd, vy: Math.sin(ang) * spd - 1,
+            life: 20 + Math.random() * 20,
+            color: ['#ff4', '#f80', '#f44', '#fff'][Math.floor(Math.random() * 4)],
+            sz: 2 + Math.random() * 3
+        });
+    }
+    playSound('explode');
+}
+
+function spawnEnemyUnit() {
+    const types = G.mission.enemyTypes;
+    const type = types[Math.floor(Math.random() * types.length)];
+    const s = ENEMY_STATS[type];
+    G.enemyUnits.push({
+        type, x: G.enemyBase.x - 40, y: GROUND_Y,
+        hp: s.hp, maxHP: s.hp, speed: s.speed,
+        damage: s.damage, range: s.range,
+        fireRate: s.fireRate, fireTimer: 0,
+        dir: 1, antiAir: s.antiAir || false
+    });
+}
+
+function spawnEnemyHeli() {
+    G.enemyHelis.push({
+        x: G.enemyBase.x, y: GROUND_Y - 120,
+        vx: 1.5, vy: 0,
+        hp: 60, maxHP: 60,
+        fireTimer: 0, alive: true,
+        state: 'advance', // advance, attack, retreat
+        stateTimer: 0, facing: 1
+    });
+}
+
+// --- UPDATE ---
+function update() {
+    // Mission complete timer runs even when not 'playing'
+    if (G.state === 'missionComplete') {
+        G.missionCompleteTimer--;
+        if (G.missionCompleteTimer <= 0) {
+            initGame(G.mi + 1);
+        }
+        return;
+    }
+    if (G.state !== 'playing') return;
+    G.frame++;
+
+    const h = G.heli;
+
+    // Income
+    G.incomeTimer++;
+    if (G.incomeTimer >= 900) { // 15s at 60fps
+        G.money += G.mission.income;
+        G.incomeTimer = 0;
+    }
+
+    // --- Helicopter physics ---
+    if (h.alive) {
+        if (keys['w'] || keys['arrowup']) h.vy -= HELI_ACCEL;
+        if (keys['s'] || keys['arrowdown']) h.vy += HELI_ACCEL;
+        if (keys['a'] || keys['arrowleft']) { h.vx -= HELI_ACCEL; h.facing = -1; }
+        if (keys['d'] || keys['arrowright']) { h.vx += HELI_ACCEL; h.facing = 1; }
+
+        h.vy += GRAVITY;
+        h.vx *= HELI_DAMP;
+        h.vy *= HELI_DAMP;
+        h.vx = Math.max(-HELI_MAX_V, Math.min(HELI_MAX_V, h.vx));
+        h.vy = Math.max(-HELI_MAX_V, Math.min(HELI_MAX_V, h.vy));
+
+        h.x += h.vx;
+        h.y += h.vy;
+
+        // Bounds
+        h.x = Math.max(30, Math.min(WORLD_W - 30, h.x));
+        h.y = Math.max(20, Math.min(GROUND_Y - 10, h.y));
+        if (h.y >= GROUND_Y - 10) { h.vy = 0; h.onGround = true; }
+        else h.onGround = false;
+
+        // Tilt
+        h.tilt = h.vx * 0.06;
+        h.rotorAng += 0.4;
+
+        // At base check
+        h.atBase = (Math.abs(h.x - G.playerBase.x) < 80 && h.y > GROUND_Y - 40);
+        if (h.atBase) {
+            h.reloadTimer++;
+            if (h.reloadTimer >= 60) { // ~1 second
+                const wasEmpty = h.ammo < h.maxAmmo || h.bombs < h.maxBombs || h.hp < h.maxHP;
+                h.ammo = h.maxAmmo;
+                h.bombs = h.maxBombs;
+                h.missiles = h.maxMissiles;
+                h.hp = h.maxHP;
+                if (wasEmpty) playSound('reload');
+                h.reloadTimer = 60;
+            }
+        } else {
+            h.reloadTimer = 0;
+        }
+
+        // Invincibility countdown
+        if (h.invTimer > 0) h.invTimer--;
+
+        // Shooting
+        if (fireCooldown > 0) fireCooldown--;
+        if (keys[' '] && h.ammo > 0 && fireCooldown <= 0) {
+            h.ammo--;
+            fireCooldown = 5;
+            const bx = h.x + h.facing * 25;
+            const by = h.y + 2;
+            G.bullets.push({
+                x: bx, y: by,
+                vx: h.facing * BULLET_SPD + h.vx * 0.3,
+                vy: h.vy * 0.2,
+                owner: 'player', life: 60, damage: 8
+            });
+            h.muzzleFlash = 3;
+            playSound('shoot');
+        }
+        if (h.muzzleFlash > 0) h.muzzleFlash--;
+
+        // Bombs
+        if (keys['b'] && h.bombs > 0 && !h._bombCd) {
+            h.bombs--;
+            h._bombCd = true;
+            G.bombs.push({
+                x: h.x, y: h.y + 10,
+                vx: h.vx * 0.5, vy: 1,
+                owner: 'player', damage: 50
+            });
+            playSound('bomb');
+        }
+        if (!keys['b']) h._bombCd = false;
+
+        // Missiles (M key) - heat-seeking, target nearest enemy heli or ground unit
+        if (keys['m'] && h.missiles > 0 && !h._mslCd) {
+            h.missiles--;
+            h._mslCd = true;
+            // Find target: prefer enemy helis, then ground units
+            let target = null;
+            let bestDist = Infinity;
+            for (const eh of G.enemyHelis) {
+                if (eh.alive) {
+                    const d = Math.hypot(eh.x - h.x, eh.y - h.y);
+                    if (d < bestDist) { bestDist = d; target = eh; }
+                }
+            }
+            if (!target) {
+                for (const u of G.enemyUnits) {
+                    if (u.alive) {
+                        const d = Math.hypot(u.x - h.x, u.y - h.y);
+                        if (d < bestDist) { bestDist = d; target = u; }
+                    }
+                }
+            }
+            G.bullets.push({
+                x: h.x + h.facing * 20, y: h.y,
+                vx: h.facing * 6, vy: 0,
+                owner: 'player', life: 180, damage: 60,
+                missile: true, target: target, speed: 5, turnRate: 0.08
+            });
+            playSound('bomb');
+        }
+        if (!keys['m']) h._mslCd = false;
+
+        // Drop troops
+        if (keys['e'] && h.troops > 0 && !h._dropCd) {
+            h.troops--;
+            h._dropCd = true;
+            G.parachuters.push({
+                x: h.x, y: h.y + 15,
+                vy: 1.2, owner: 'player',
+                landed: false
+            });
+        }
+        if (!keys['e']) h._dropCd = false;
+
+        // Auto-pickup infantry when flying low near them
+        if (h.y >= GROUND_Y - 60 && h.troops < h.maxTroops && G.frame % 15 === 0) {
+            pickupTroops();
+        }
+
+        // Collision with balloons
+        for (const bl of G.balloons) {
+            if (!bl.alive) continue;
+            // Check cable line too
+            const cableTop = bl.y;
+            const cableBottom = GROUND_Y;
+            if (Math.abs(h.x - bl.x) < 15 && h.y >= cableTop - 20 && h.y <= cableBottom) {
+                if (h.invTimer <= 0) {
+                    h.hp -= 20;
+                    h.invTimer = 30;
+                    playSound('damage');
+                }
+            }
+        }
+    }
+
+    // Camera follow
+    const targetCamX = h.x - CW / 2;
+    G.cam.x += (targetCamX - G.cam.x) * 0.08;
+    G.cam.x = Math.max(0, Math.min(WORLD_W - CW, G.cam.x));
+
+    // --- Bullets ---
+    for (let i = G.bullets.length - 1; i >= 0; i--) {
+        const b = G.bullets[i];
+        // Missile homing logic
+        if (b.missile && b.target && b.target.alive !== false) {
+            const dx = b.target.x - b.x;
+            const dy = (b.target.y || GROUND_Y) - b.y;
+            const desired = Math.atan2(dy, dx);
+            const current = Math.atan2(b.vy, b.vx);
+            let diff = desired - current;
+            while (diff > Math.PI) diff -= Math.PI * 2;
+            while (diff < -Math.PI) diff += Math.PI * 2;
+            const turn = Math.max(-b.turnRate, Math.min(b.turnRate, diff));
+            const ang = current + turn;
+            b.vx = Math.cos(ang) * b.speed;
+            b.vy = Math.sin(ang) * b.speed;
+        }
+        b.x += b.vx; b.y += b.vy;
+        b.life--;
+        if (b.life <= 0 || b.y > GROUND_Y || b.x < 0 || b.x > WORLD_W) {
+            if (b.missile) spawnExplosion(b.x, b.y, 8);
+            G.bullets.splice(i, 1); continue;
+        }
+
+        if (b.owner === 'player') {
+            // Hit enemy units
+            for (let j = G.enemyUnits.length - 1; j >= 0; j--) {
+                const u = G.enemyUnits[j];
+                if (Math.abs(b.x - u.x) < 15 && Math.abs(b.y - u.y) < 15) {
+                    u.hp -= b.damage;
+                    G.bullets.splice(i, 1);
+                    if (u.hp <= 0) {
+                        spawnExplosion(u.x, u.y, 20);
+                        G.money += u.type === 'tank' ? 40 : u.type === 'aa' ? 30 : 10;
+                        G.score += u.type === 'tank' ? 40 : u.type === 'aa' ? 30 : 10;
+                        G.enemyUnits.splice(j, 1);
+                    }
+                    break;
+                }
+            }
+            // Hit enemy helis
+            for (const eh of G.enemyHelis) {
+                if (!eh.alive) continue;
+                if (Math.abs(b.x - eh.x) < 20 && Math.abs(b.y - eh.y) < 15) {
+                    eh.hp -= b.damage;
+                    if (G.bullets.indexOf(b) >= 0) G.bullets.splice(G.bullets.indexOf(b), 1);
+                    if (eh.hp <= 0) {
+                        eh.alive = false;
+                        spawnExplosion(eh.x, eh.y, 35);
+                        G.money += 60;
+                        G.score += 60;
+                    }
+                    break;
+                }
+            }
+            // Hit balloons
+            for (const bl of G.balloons) {
+                if (!bl.alive) continue;
+                if (Math.abs(b.x - bl.x) < 20 && Math.abs(b.y - bl.y) < 25) {
+                    bl.hp -= b.damage;
+                    if (G.bullets.indexOf(b) >= 0) G.bullets.splice(G.bullets.indexOf(b), 1);
+                    if (bl.hp <= 0) {
+                        bl.alive = false;
+                        spawnExplosion(bl.x, bl.y, 25);
+                    }
+                    break;
+                }
+            }
+        } else {
+            // Enemy bullet hit player heli
+            if (h.alive && h.invTimer <= 0 && Math.abs(b.x - h.x) < 20 && Math.abs(b.y - h.y) < 15) {
+                h.hp -= b.damage;
+                playSound('damage');
+                G.bullets.splice(i, 1);
+                continue;
+            }
+            // Hit player units
+            for (let j = G.playerUnits.length - 1; j >= 0; j--) {
+                const u = G.playerUnits[j];
+                if (Math.abs(b.x - u.x) < 15 && Math.abs(b.y - u.y) < 15) {
+                    u.hp -= b.damage;
+                    G.bullets.splice(i, 1);
+                    if (u.hp <= 0) {
+                        spawnExplosion(u.x, u.y, 20);
+                        G.playerUnits.splice(j, 1);
+                    }
+                    break;
+                }
+            }
+        }
+    }
+
+    // --- Bombs ---
+    for (let i = G.bombs.length - 1; i >= 0; i--) {
+        const b = G.bombs[i];
+        b.vy += 0.15;
+        b.x += b.vx; b.y += b.vy;
+        if (b.y >= GROUND_Y) {
+            spawnExplosion(b.x, GROUND_Y, 40);
+            // Damage nearby enemies/bunkers
+            if (b.owner === 'player') {
+                for (let j = G.enemyUnits.length - 1; j >= 0; j--) {
+                    const u = G.enemyUnits[j];
+                    if (Math.abs(b.x - u.x) < 60) {
+                        u.hp -= b.damage;
+                        if (u.hp <= 0) {
+                            spawnExplosion(u.x, u.y, 20);
+                            G.money += u.type === 'tank' ? 40 : 10;
+                            G.score += u.type === 'tank' ? 40 : 10;
+                            G.enemyUnits.splice(j, 1);
+                        }
+                    }
+                }
+                // Damage enemy base
+                if (Math.abs(b.x - G.enemyBase.x) < 80) {
+                    G.enemyBase.hp -= b.damage;
+                }
+                // Damage bunkers
+                for (const bk of G.bunkers) {
+                    if (Math.abs(b.x - bk.x) < 40) {
+                        bk.hp -= b.damage;
+                    }
+                }
+            } else {
+                // Enemy bomb
+                for (let j = G.playerUnits.length - 1; j >= 0; j--) {
+                    const u = G.playerUnits[j];
+                    if (Math.abs(b.x - u.x) < 60) {
+                        u.hp -= b.damage;
+                        if (u.hp <= 0) {
+                            spawnExplosion(u.x, u.y, 20);
+                            G.playerUnits.splice(j, 1);
+                        }
+                    }
+                }
+                if (Math.abs(b.x - G.playerBase.x) < 80) {
+                    G.playerBase.hp -= b.damage;
+                }
+            }
+            G.bombs.splice(i, 1);
+        }
+    }
+
+    // --- Parachuters ---
+    for (let i = G.parachuters.length - 1; i >= 0; i--) {
+        const p = G.parachuters[i];
+        p.y += p.vy;
+        if (p.y >= GROUND_Y) {
+            p.y = GROUND_Y;
+            // Convert to infantry
+            if (p.owner === 'player') {
+                const s = UNIT_STATS.infantry;
+                G.playerUnits.push({
+                    type: 'infantry', x: p.x, y: GROUND_Y,
+                    hp: s.hp, maxHP: s.hp, speed: s.speed,
+                    damage: s.damage, range: s.range,
+                    fireRate: s.fireRate, fireTimer: 0,
+                    dir: -1, antiAir: false
+                });
+            }
+            G.parachuters.splice(i, 1);
+        }
+    }
+
+    // --- Player Units ---
+    for (let i = G.playerUnits.length - 1; i >= 0; i--) {
+        const u = G.playerUnits[i];
+        let engaged = false;
+
+        // Check for enemy in range
+        for (const e of G.enemyUnits) {
+            const dist = Math.abs(u.x - e.x);
+            if (dist < u.range && u.fireRate > 0) {
+                engaged = true;
+                u.fireTimer++;
+                if (u.fireTimer >= u.fireRate) {
+                    u.fireTimer = 0;
+                    e.hp -= u.damage;
+                    // Visual bullet
+                    G.bullets.push({
+                        x: u.x, y: u.y - 8,
+                        vx: (e.x - u.x) > 0 ? 6 : -6, vy: -0.5,
+                        owner: 'player', life: 20, damage: 0 // damage already applied
+                    });
+                    if (e.hp <= 0) {
+                        spawnExplosion(e.x, e.y, 20);
+                        G.money += e.type === 'tank' ? 40 : 10;
+                        G.score += e.type === 'tank' ? 40 : 10;
+                        G.enemyUnits.splice(G.enemyUnits.indexOf(e), 1);
+                    }
+                }
+                break;
+            }
+        }
+
+        // AA targets enemy helis
+        if (u.antiAir && !engaged) {
+            for (const eh of G.enemyHelis) {
+                if (!eh.alive) continue;
+                const dx = eh.x - u.x, dy = eh.y - u.y;
+                const dist = Math.sqrt(dx * dx + dy * dy);
+                if (dist < u.range) {
+                    engaged = true;
+                    u.fireTimer++;
+                    if (u.fireTimer >= u.fireRate) {
+                        u.fireTimer = 0;
+                        eh.hp -= u.damage;
+                        G.bullets.push({
+                            x: u.x, y: u.y - 10,
+                            vx: dx / dist * 7, vy: dy / dist * 7,
+                            owner: 'player', life: 30, damage: 0
+                        });
+                        if (eh.hp <= 0) {
+                            eh.alive = false;
+                            spawnExplosion(eh.x, eh.y, 35);
+                            G.money += 60; G.score += 60;
+                        }
+                    }
+                    break;
+                }
+            }
+        }
+
+        if (!engaged) {
+            u.x += u.speed * u.dir;
+        }
+
+        // Demo van reaching enemy base
+        if (u.type === 'van' && Math.abs(u.x - G.enemyBase.x) < 60) {
+            G.enemyBase.hp -= u.damage;
+            spawnExplosion(u.x, u.y, 60);
+            G.playerUnits.splice(i, 1);
+            continue;
+        }
+
+        // Bunker capture: infantry near neutral/enemy bunker
+        if (u.type === 'infantry') {
+            for (const bk of G.bunkers) {
+                if (Math.abs(u.x - bk.x) < 40 && bk.owner !== 'player' && bk.hp > 0) {
+                    bk.captureTimer++;
+                    bk.captureBy = 'player';
+                    if (bk.captureTimer >= 120) {
+                        bk.owner = 'player';
+                        bk.captureTimer = 0;
+                    }
+                }
+            }
+        }
+
+        // Remove if off map
+        if (u.x < 0 || u.x > WORLD_W) { G.playerUnits.splice(i, 1); }
+    }
+
+    // --- Enemy Units ---
+    for (let i = G.enemyUnits.length - 1; i >= 0; i--) {
+        const u = G.enemyUnits[i];
+        let engaged = false;
+
+        for (const p of G.playerUnits) {
+            const dist = Math.abs(u.x - p.x);
+            if (dist < u.range && u.fireRate > 0) {
+                engaged = true;
+                u.fireTimer++;
+                if (u.fireTimer >= u.fireRate) {
+                    u.fireTimer = 0;
+                    p.hp -= u.damage;
+                    G.bullets.push({
+                        x: u.x, y: u.y - 8,
+                        vx: (p.x - u.x) > 0 ? 6 : -6, vy: -0.5,
+                        owner: 'enemy', life: 20, damage: 0
+                    });
+                    if (p.hp <= 0) {
+                        spawnExplosion(p.x, p.y, 20);
+                        G.playerUnits.splice(G.playerUnits.indexOf(p), 1);
+                    }
+                }
+                break;
+            }
+        }
+
+        // AA targets player heli
+        if (u.antiAir && h.alive && !engaged) {
+            const dx = h.x - u.x, dy = h.y - u.y;
+            const dist = Math.sqrt(dx * dx + dy * dy);
+            if (dist < u.range) {
+                engaged = true;
+                u.fireTimer++;
+                if (u.fireTimer >= u.fireRate) {
+                    u.fireTimer = 0;
+                    G.bullets.push({
+                        x: u.x, y: u.y - 10,
+                        vx: dx / dist * 5, vy: dy / dist * 5,
+                        owner: 'enemy', life: 40, damage: 15
+                    });
+                }
+            }
+        }
+
+        if (!engaged) {
+            u.x += u.speed * u.dir;
+        }
+
+        // Enemy near player base
+        if (Math.abs(u.x - G.playerBase.x) < 60) {
+            G.playerBase.hp -= u.damage * 0.02;
+            // they stay and fight
+        }
+
+        // Infantry capture bunkers
+        if (u.type === 'infantry') {
+            for (const bk of G.bunkers) {
+                if (Math.abs(u.x - bk.x) < 40 && bk.owner !== 'enemy' && bk.hp > 0) {
+                    bk.captureTimer++;
+                    bk.captureBy = 'enemy';
+                    if (bk.captureTimer >= 120) {
+                        bk.owner = 'enemy';
+                        bk.captureTimer = 0;
+                    }
+                }
+            }
+        }
+
+        if (u.x < 0 || u.x > WORLD_W) { G.enemyUnits.splice(i, 1); }
+    }
+
+    // --- Bunkers fire ---
+    for (const bk of G.bunkers) {
+        if (bk.hp <= 0) { bk.owner = 'neutral'; continue; }
+        bk.fireTimer++;
+        if (bk.fireTimer < 60) continue;
+
+        if (bk.owner === 'player') {
+            // Fire at nearest enemy
+            let nearest = null, nd = 999;
+            for (const e of G.enemyUnits) {
+                const d = Math.abs(e.x - bk.x);
+                if (d < 200 && d < nd) { nd = d; nearest = e; }
+            }
+            if (nearest) {
+                bk.fireTimer = 0;
+                nearest.hp -= 10;
+                G.bullets.push({
+                    x: bk.x, y: GROUND_Y - 15,
+                    vx: nearest.x > bk.x ? 5 : -5, vy: -1,
+                    owner: 'player', life: 25, damage: 0
+                });
+                if (nearest.hp <= 0) {
+                    spawnExplosion(nearest.x, nearest.y, 20);
+                    G.enemyUnits.splice(G.enemyUnits.indexOf(nearest), 1);
+                }
+            }
+        } else if (bk.owner === 'enemy') {
+            let nearest = null, nd = 999;
+            for (const p of G.playerUnits) {
+                const d = Math.abs(p.x - bk.x);
+                if (d < 200 && d < nd) { nd = d; nearest = p; }
+            }
+            if (nearest) {
+                bk.fireTimer = 0;
+                nearest.hp -= 10;
+                G.bullets.push({
+                    x: bk.x, y: GROUND_Y - 15,
+                    vx: nearest.x > bk.x ? 5 : -5, vy: -1,
+                    owner: 'enemy', life: 25, damage: 0
+                });
+                if (nearest.hp <= 0) {
+                    spawnExplosion(nearest.x, nearest.y, 20);
+                    G.playerUnits.splice(G.playerUnits.indexOf(nearest), 1);
+                }
+            }
+            // Also fire at heli
+            if (h.alive && h.invTimer <= 0) {
+                const dx = h.x - bk.x, dy = h.y - (GROUND_Y - 15);
+                const dist = Math.sqrt(dx*dx + dy*dy);
+                if (dist < 250 && bk.fireTimer >= 45) {
+                    bk.fireTimer = 0;
+                    G.bullets.push({
+                        x: bk.x, y: GROUND_Y - 15,
+                        vx: dx / dist * 5, vy: dy / dist * 5,
+                        owner: 'enemy', life: 30, damage: 10
+                    });
+                }
+            }
+        }
+
+        // Reset capture if nobody's around
+        if (bk.captureBy) {
+            let anybodyNear = false;
+            const units = bk.captureBy === 'player' ? G.playerUnits : G.enemyUnits;
+            for (const u of units) {
+                if (u.type === 'infantry' && Math.abs(u.x - bk.x) < 40) anybodyNear = true;
+            }
+            if (!anybodyNear) { bk.captureTimer = 0; bk.captureBy = null; }
+        }
+    }
+
+    // --- Enemy AI spawning ---
+    G.enemySpawnTimer++;
+    if (G.enemySpawnTimer >= G.mission.spawnRate) {
+        G.enemySpawnTimer = 0;
+        if (Math.random() < G.mission.aggression) {
+            spawnEnemyUnit();
+        }
+    }
+
+    // Enemy heli spawning (mission 2+)
+    if (G.mi >= 1) {
+        G.enemyHeliTimer++;
+        const heliInterval = Math.max(600, 1200 - G.mi * 150);
+        if (G.enemyHeliTimer >= heliInterval && G.enemyHelis.filter(e => e.alive).length < 2) {
+            G.enemyHeliTimer = 0;
+            if (Math.random() < G.mission.aggression) spawnEnemyHeli();
+        }
+    }
+
+    // --- Enemy Helis AI ---
+    for (let i = G.enemyHelis.length - 1; i >= 0; i--) {
+        const e = G.enemyHelis[i];
+        if (!e.alive) { G.enemyHelis.splice(i, 1); continue; }
+
+        e.stateTimer++;
+
+        if (e.state === 'advance') {
+            e.vx = 1.5;
+            e.vy = Math.sin(G.frame * 0.02) * 0.3;
+            e.facing = 1;
+            if (e.x > WORLD_W * 0.6 || e.stateTimer > 300) {
+                e.state = 'attack'; e.stateTimer = 0;
+            }
+        } else if (e.state === 'attack') {
+            // Move toward player heli or base
+            const tx = h.alive ? h.x : G.playerBase.x;
+            const ty = h.alive ? h.y : GROUND_Y - 60;
+            const dx = tx - e.x, dy = ty - e.y;
+            const dist = Math.sqrt(dx*dx + dy*dy);
+            e.vx = (dx / dist) * 2;
+            e.vy = (dy / dist) * 1.5;
+            e.facing = e.vx > 0 ? 1 : -1;
+
+            // Fire
+            e.fireTimer++;
+            if (e.fireTimer >= 40) {
+                e.fireTimer = 0;
+                G.bullets.push({
+                    x: e.x + e.facing * 20, y: e.y + 3,
+                    vx: e.facing * 7, vy: 0.5,
+                    owner: 'enemy', life: 50, damage: 10
+                });
+                // Occasionally drop bombs
+                if (Math.random() < 0.2 * G.mission.aggression) {
+                    G.bombs.push({
+                        x: e.x, y: e.y + 10,
+                        vx: e.vx * 0.3, vy: 1,
+                        owner: 'enemy', damage: 30
+                    });
+                }
+            }
+
+            if (e.stateTimer > 400 || e.hp < e.maxHP * 0.3) {
+                e.state = 'retreat'; e.stateTimer = 0;
+            }
+        } else if (e.state === 'retreat') {
+            e.vx = -2;
+            e.vy = Math.sin(G.frame * 0.03) * 0.5;
+            e.facing = -1;
+            if (e.x < G.enemyBase.x + 50 || e.stateTimer > 300) {
+                e.state = 'advance'; e.stateTimer = 0;
+                e.hp = Math.min(e.maxHP, e.hp + 20); // partial heal
+            }
+        }
+
+        e.x += e.vx;
+        e.y += e.vy;
+        e.y = Math.max(40, Math.min(GROUND_Y - 30, e.y));
+        e.x = Math.max(50, Math.min(WORLD_W - 50, e.x));
+
+        // Collision with player heli
+        if (h.alive && h.invTimer <= 0 && Math.abs(e.x - h.x) < 30 && Math.abs(e.y - h.y) < 20) {
+            h.hp -= 25;
+            e.hp -= 25;
+            h.invTimer = 30;
+            playSound('damage');
+            if (e.hp <= 0) {
+                e.alive = false;
+                spawnExplosion(e.x, e.y, 35);
+                G.money += 60; G.score += 60;
+            }
+        }
+    }
+
+    // --- Explosions & Particles ---
+    for (let i = G.explosions.length - 1; i >= 0; i--) {
+        const e = G.explosions[i];
+        e.t++;
+        e.radius = e.maxR * (e.t / 20);
+        e.alpha = 1 - e.t / 25;
+        if (e.alpha <= 0) G.explosions.splice(i, 1);
+    }
+
+    for (let i = G.particles.length - 1; i >= 0; i--) {
+        const p = G.particles[i];
+        p.x += p.vx; p.y += p.vy;
+        p.vy += 0.05;
+        p.life--;
+        if (p.life <= 0) G.particles.splice(i, 1);
+    }
+
+    // --- Heli death ---
+    if (h.alive && h.hp <= 0) {
+        h.alive = false;
+        spawnExplosion(h.x, h.y, 45);
+        G.lives--;
+        if (G.lives > 0) {
+            setTimeout(() => {
+                if (G.state !== 'playing') return;
+                h.x = G.playerBase.x;
+                h.y = GROUND_Y - 80;
+                h.vx = 0; h.vy = 0;
+                h.hp = h.maxHP;
+                h.ammo = h.maxAmmo;
+                h.bombs = h.maxBombs;
+                h.missiles = h.maxMissiles;
+                h.troops = 0;
+                h.alive = true;
+                h.invTimer = 120;
+            }, 1500);
+        } else {
+            setTimeout(() => { if (G.state === 'playing') G.state = 'defeated'; }, 1500);
+        }
+    }
+
+    // --- Base death checks ---
+    if (G.playerBase.hp <= 0) {
+        G.playerBase.hp = 0;
+        G.state = 'defeated';
+    }
+    if (G.enemyBase.hp <= 0 && G.state === 'playing') {
+        G.enemyBase.hp = 0;
+        if (G.mi < MISSIONS.length - 1) {
+            G.state = 'missionComplete';
+            G.missionCompleteTimer = 180;
+        } else {
+            G.state = 'victory';
+        }
+    }
+
+    // Balloon sway
+    for (const bl of G.balloons) {
+        if (bl.alive) bl.sway += 0.015;
+    }
+}
+
+// ================== DRAWING ==================
+
+function drawSky() {
+    // Dark gradient sky
+    const grad = ctx.createLinearGradient(0, 0, 0, GROUND_Y);
+    grad.addColorStop(0, '#050520');
+    grad.addColorStop(1, '#0a0a30');
+    ctx.fillStyle = grad;
+    ctx.fillRect(0, 0, CW, GROUND_Y);
+}
+
+function drawStars() {
+    for (const s of G.stars) {
+        const sx = (s.x - G.cam.x * s.layer) % (CW + 100);
+        if (sx < -10 || sx > CW + 10) continue;
+        const twinkle = 0.5 + 0.5 * Math.sin(G.frame * 0.03 + s.tw);
+        const alpha = s.bright * twinkle;
+        ctx.fillStyle = `rgba(255,255,255,${alpha})`;
+        ctx.fillRect(sx, s.y, s.sz, s.sz);
+    }
+}
+
+function drawGround() {
+    // Green ground
+    ctx.fillStyle = '#1a3a1a';
+    ctx.fillRect(0, GROUND_Y, CW, CH - GROUND_Y);
+    // Ground line
+    ctx.strokeStyle = '#2a5a2a';
+    ctx.lineWidth = 2;
+    ctx.beginPath();
+    ctx.moveTo(0, GROUND_Y);
+    ctx.lineTo(CW, GROUND_Y);
+    ctx.stroke();
+    // Grass details
+    ctx.fillStyle = '#2a5a2a';
+    for (let x = 0; x < CW; x += 15) {
+        const wx = x + G.cam.x;
+        const h = 3 + Math.sin(wx * 0.1) * 2;
+        ctx.fillRect(x, GROUND_Y - h, 2, h);
+    }
+}
+
+function drawTrees() {
+    for (const t of G.trees) {
+        const sx = t.x - G.cam.x;
+        if (sx < -30 || sx > CW + 30) continue;
+        // Trunk
+        ctx.fillStyle = '#3a2a1a';
+        ctx.fillRect(sx - 3, GROUND_Y - t.h * 0.4, 6, t.h * 0.4);
+        // Crown
+        ctx.fillStyle = `rgb(${30 + t.shade * 60},${80 + t.shade * 40},${30 + t.shade * 30})`;
+        ctx.beginPath();
+        ctx.arc(sx, GROUND_Y - t.h * 0.6, t.w / 2, 0, Math.PI * 2);
+        ctx.fill();
+        // Darker inner
+        ctx.fillStyle = `rgba(0,0,0,0.2)`;
+        ctx.beginPath();
+        ctx.arc(sx + 3, GROUND_Y - t.h * 0.55, t.w / 3, 0, Math.PI * 2);
+        ctx.fill();
+    }
+}
+
+function drawPlayerBase() {
+    const bx = G.playerBase.x - G.cam.x;
+    if (bx < -120 || bx > CW + 120) return;
+
+    // Main building
+    ctx.fillStyle = '#1a4a1a';
+    ctx.fillRect(bx - 40, GROUND_Y - 60, 80, 60);
+    // Roof
+    ctx.fillStyle = '#2a6a2a';
+    ctx.fillRect(bx - 45, GROUND_Y - 65, 90, 8);
+    // Windows (lit)
+    for (let wy = 0; wy < 3; wy++) {
+        for (let wx = 0; wx < 3; wx++) {
+            ctx.fillStyle = (wy + wx + G.frame) % 7 < 3 ? '#6f6' : '#4a4';
+            ctx.fillRect(bx - 28 + wx * 22, GROUND_Y - 55 + wy * 18, 10, 8);
+        }
+    }
+    // Flag
+    ctx.strokeStyle = '#888';
+    ctx.lineWidth = 1;
+    ctx.beginPath();
+    ctx.moveTo(bx + 30, GROUND_Y - 65);
+    ctx.lineTo(bx + 30, GROUND_Y - 90);
+    ctx.stroke();
+    ctx.fillStyle = '#0f0';
+    ctx.fillRect(bx + 31, GROUND_Y - 90, 15, 10);
+
+    // Secondary building
+    ctx.fillStyle = '#1a3a1a';
+    ctx.fillRect(bx + 50, GROUND_Y - 40, 40, 40);
+    ctx.fillStyle = '#2a5a2a';
+    ctx.fillRect(bx + 48, GROUND_Y - 43, 44, 5);
+    // Window
+    ctx.fillStyle = '#6f6';
+    ctx.fillRect(bx + 60, GROUND_Y - 35, 10, 8);
+
+    // Helipad
+    ctx.fillStyle = '#333';
+    ctx.fillRect(bx + 55, GROUND_Y - 3, 50, 3);
+    // H marking
+    ctx.fillStyle = '#0f0';
+    ctx.beginPath();
+    ctx.arc(bx + 80, GROUND_Y - 1, 12, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.fillStyle = '#000';
+    ctx.font = 'bold 14px monospace';
+    ctx.textAlign = 'center';
+    ctx.fillText('H', bx + 80, GROUND_Y + 4);
+
+    // Label
+    ctx.fillStyle = '#0f0';
+    ctx.font = '10px monospace';
+    ctx.textAlign = 'center';
+    ctx.fillText('YOUR BASE', bx + 10, GROUND_Y - 70);
+}
+
+function drawEnemyBase() {
+    const bx = G.enemyBase.x - G.cam.x;
+    if (bx < -120 || bx > CW + 120) return;
+
+    // Main building
+    ctx.fillStyle = '#4a1a1a';
+    ctx.fillRect(bx - 40, GROUND_Y - 60, 80, 60);
+    ctx.fillStyle = '#6a2a2a';
+    ctx.fillRect(bx - 45, GROUND_Y - 65, 90, 8);
+    // Windows
+    for (let wy = 0; wy < 3; wy++) {
+        for (let wx = 0; wx < 3; wx++) {
+            ctx.fillStyle = (wy + wx + G.frame) % 5 < 2 ? '#f66' : '#a44';
+            ctx.fillRect(bx - 28 + wx * 22, GROUND_Y - 55 + wy * 18, 10, 8);
+        }
+    }
+    // Flag
+    ctx.strokeStyle = '#888';
+    ctx.lineWidth = 1;
+    ctx.beginPath();
+    ctx.moveTo(bx - 30, GROUND_Y - 65);
+    ctx.lineTo(bx - 30, GROUND_Y - 90);
+    ctx.stroke();
+    ctx.fillStyle = '#f00';
+    ctx.fillRect(bx - 45, GROUND_Y - 90, 15, 10);
+
+    // Secondary
+    ctx.fillStyle = '#3a1a1a';
+    ctx.fillRect(bx - 80, GROUND_Y - 40, 40, 40);
+    ctx.fillStyle = '#5a2a2a';
+    ctx.fillRect(bx - 82, GROUND_Y - 43, 44, 5);
+    ctx.fillStyle = '#f66';
+    ctx.fillRect(bx - 70, GROUND_Y - 35, 10, 8);
+
+    ctx.fillStyle = '#f44';
+    ctx.font = '10px monospace';
+    ctx.textAlign = 'center';
+    ctx.fillText('ENEMY BASE', bx, GROUND_Y - 70);
+}
+
+function drawHeli(x, y, facing, tilt, rotorAng, isPlayer, invTimer, muzzleFlash, troops) {
+    const sx = x - G.cam.x;
+    if (sx < -60 || sx > CW + 60) return;
+
+    ctx.save();
+    ctx.translate(sx, y);
+    ctx.rotate(tilt || 0);
+
+    // Invincibility flash
+    if (invTimer > 0 && Math.floor(invTimer / 4) % 2 === 0) {
+        ctx.globalAlpha = 0.4;
+    }
+
+    const c1 = isPlayer ? '#3a8a3a' : '#8a3a3a';
+    const c2 = isPlayer ? '#5ab55a' : '#b55a5a';
+    const c3 = isPlayer ? '#8f8' : '#f88';
+
+    // Body
+    ctx.fillStyle = c1;
+    ctx.beginPath();
+    ctx.ellipse(0, 0, 22, 10, 0, 0, Math.PI * 2);
+    ctx.fill();
+
+    // Cockpit
+    ctx.fillStyle = c2;
+    ctx.beginPath();
+    ctx.ellipse(facing * 10, -2, 8, 7, 0, 0, Math.PI * 2);
+    ctx.fill();
+    // Cockpit glass
+    ctx.fillStyle = isPlayer ? '#afd' : '#faa';
+    ctx.beginPath();
+    ctx.ellipse(facing * 13, -3, 4, 4, 0, 0, Math.PI * 2);
+    ctx.fill();
+
+    // Tail
+    ctx.fillStyle = c1;
+    ctx.fillRect(-facing * 18, -4, -facing * 18, 5);
+    // Tail rotor
+    ctx.fillStyle = c3;
+    ctx.fillRect(-facing * 34, -8, 3, 12);
+
+    // Skids
+    ctx.strokeStyle = '#888';
+    ctx.lineWidth = 2;
+    ctx.beginPath();
+    ctx.moveTo(-10, 10); ctx.lineTo(-15, 14);
+    ctx.moveTo(10, 10); ctx.lineTo(15, 14);
+    ctx.moveTo(-16, 14); ctx.lineTo(16, 14);
+    ctx.stroke();
+
+    // Main rotor
+    ctx.strokeStyle = c3;
+    ctx.lineWidth = 2;
+    const ra = rotorAng || 0;
+    const rx = Math.cos(ra) * 28;
+    ctx.beginPath();
+    ctx.moveTo(-rx, -12); ctx.lineTo(rx, -12);
+    ctx.stroke();
+    // Rotor shaft
+    ctx.strokeStyle = '#888';
+    ctx.lineWidth = 1;
+    ctx.beginPath();
+    ctx.moveTo(0, -10); ctx.lineTo(0, -12);
+    ctx.stroke();
+
+    // Muzzle flash
+    if (muzzleFlash > 0 && isPlayer) {
+        ctx.fillStyle = '#ff0';
+        ctx.beginPath();
+        ctx.arc(facing * 28, 2, 4, 0, Math.PI * 2);
+        ctx.fill();
+    }
+
+    ctx.globalAlpha = 1;
+    ctx.restore();
+}
+
+function drawUnit(u, isPlayer) {
+    const sx = u.x - G.cam.x;
+    if (sx < -30 || sx > CW + 30) return;
+
+    const pc = isPlayer ? '#4a4' : '#a44';
+    const pc2 = isPlayer ? '#6c6' : '#c66';
+
+    if (u.type === 'infantry') {
+        // Stick figure
+        ctx.fillStyle = pc2;
+        // Head
+        ctx.beginPath();
+        ctx.arc(sx, GROUND_Y - 14, 3, 0, Math.PI * 2);
+        ctx.fill();
+        // Body
+        ctx.strokeStyle = pc2;
+        ctx.lineWidth = 2;
+        ctx.beginPath();
+        ctx.moveTo(sx, GROUND_Y - 11);
+        ctx.lineTo(sx, GROUND_Y - 4);
+        ctx.stroke();
+        // Legs
+        ctx.beginPath();
+        ctx.moveTo(sx, GROUND_Y - 4);
+        ctx.lineTo(sx - 3, GROUND_Y);
+        ctx.moveTo(sx, GROUND_Y - 4);
+        ctx.lineTo(sx + 3, GROUND_Y);
+        ctx.stroke();
+        // Gun arm
+        ctx.beginPath();
+        ctx.moveTo(sx, GROUND_Y - 9);
+        ctx.lineTo(sx + u.dir * 6, GROUND_Y - 10);
+        ctx.stroke();
+        // Gun
+        ctx.fillStyle = '#888';
+        ctx.fillRect(sx + u.dir * 5, GROUND_Y - 11, u.dir * 5, 2);
+    } else if (u.type === 'tank') {
+        // Tracks
+        ctx.fillStyle = '#555';
+        ctx.fillRect(sx - 16, GROUND_Y - 8, 32, 8);
+        // Wheels
+        ctx.fillStyle = '#333';
+        for (let w = -12; w <= 12; w += 8) {
+            ctx.beginPath();
+            ctx.arc(sx + w, GROUND_Y - 4, 4, 0, Math.PI * 2);
+            ctx.fill();
+        }
+        // Body
+        ctx.fillStyle = pc;
+        ctx.fillRect(sx - 14, GROUND_Y - 16, 28, 10);
+        // Turret
+        ctx.fillStyle = pc2;
+        ctx.fillRect(sx - 8, GROUND_Y - 22, 16, 8);
+        // Barrel
+        ctx.fillStyle = '#888';
+        ctx.fillRect(sx + u.dir * 8, GROUND_Y - 20, u.dir * 14, 3);
+        // Track detail
+        ctx.strokeStyle = '#444';
+        ctx.lineWidth = 1;
+        ctx.strokeRect(sx - 16, GROUND_Y - 8, 32, 8);
+    } else if (u.type === 'aa') {
+        // Base
+        ctx.fillStyle = pc;
+        ctx.fillRect(sx - 12, GROUND_Y - 12, 24, 12);
+        // Wheels
+        ctx.fillStyle = '#333';
+        ctx.beginPath();
+        ctx.arc(sx - 8, GROUND_Y - 2, 3, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.beginPath();
+        ctx.arc(sx + 8, GROUND_Y - 2, 3, 0, Math.PI * 2);
+        ctx.fill();
+        // Gun barrel (vertical-ish)
+        ctx.strokeStyle = '#888';
+        ctx.lineWidth = 3;
+        ctx.beginPath();
+        ctx.moveTo(sx, GROUND_Y - 12);
+        ctx.lineTo(sx + u.dir * 4, GROUND_Y - 28);
+        ctx.stroke();
+        // Dish
+        ctx.fillStyle = pc2;
+        ctx.beginPath();
+        ctx.arc(sx + u.dir * 4, GROUND_Y - 28, 4, 0, Math.PI * 2);
+        ctx.fill();
+    } else if (u.type === 'van') {
+        // Van body
+        ctx.fillStyle = pc;
+        ctx.fillRect(sx - 18, GROUND_Y - 18, 36, 18);
+        // Cabin
+        ctx.fillStyle = pc2;
+        ctx.fillRect(sx + u.dir * 8, GROUND_Y - 22, u.dir * 10, 10);
+        // Windshield
+        ctx.fillStyle = '#8cf';
+        ctx.fillRect(sx + u.dir * 14, GROUND_Y - 20, u.dir * 3, 6);
+        // Wheels
+        ctx.fillStyle = '#333';
+        ctx.beginPath();
+        ctx.arc(sx - 10, GROUND_Y - 2, 4, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.beginPath();
+        ctx.arc(sx + 10, GROUND_Y - 2, 4, 0, Math.PI * 2);
+        ctx.fill();
+        // Star marking
+        ctx.fillStyle = '#ff0';
+        ctx.font = 'bold 10px monospace';
+        ctx.textAlign = 'center';
+        ctx.fillText('\u2605', sx, GROUND_Y - 8);
+    }
+
+    // HP bar
+    if (u.hp < u.maxHP) {
+        const bw = 24;
+        ctx.fillStyle = '#300';
+        ctx.fillRect(sx - bw/2, GROUND_Y - (u.type === 'tank' ? 28 : u.type === 'van' ? 28 : 20), bw, 3);
+        ctx.fillStyle = isPlayer ? '#0f0' : '#f00';
+        ctx.fillRect(sx - bw/2, GROUND_Y - (u.type === 'tank' ? 28 : u.type === 'van' ? 28 : 20), bw * (u.hp / u.maxHP), 3);
+    }
+}
+
+function drawBunker(bk) {
+    const sx = bk.x - G.cam.x;
+    if (sx < -40 || sx > CW + 40) return;
+
+    const col = bk.owner === 'player' ? '#3a8a3a' : bk.owner === 'enemy' ? '#8a3a3a' : '#666';
+    const col2 = bk.owner === 'player' ? '#5ab55a' : bk.owner === 'enemy' ? '#b55a5a' : '#888';
+
+    if (bk.hp <= 0) {
+        // Destroyed bunker - rubble
+        ctx.fillStyle = '#444';
+        ctx.fillRect(sx - 15, GROUND_Y - 5, 30, 5);
+        return;
+    }
+
+    // Walls
+    ctx.fillStyle = col;
+    ctx.fillRect(sx - 18, GROUND_Y - 20, 36, 20);
+    // Parapet
+    ctx.fillStyle = col2;
+    for (let c = -15; c <= 15; c += 10) {
+        ctx.fillRect(sx + c, GROUND_Y - 26, 6, 8);
+    }
+    // Slit
+    ctx.fillStyle = '#000';
+    ctx.fillRect(sx - 4, GROUND_Y - 14, 8, 3);
+    // Flag indicator
+    if (bk.owner !== 'neutral') {
+        ctx.fillStyle = bk.owner === 'player' ? '#0f0' : '#f00';
+        ctx.fillRect(sx - 1, GROUND_Y - 32, 2, 8);
+        ctx.fillRect(sx + 1, GROUND_Y - 32, 6, 4);
+    }
+
+    // Capture progress
+    if (bk.captureTimer > 0) {
+        const pct = bk.captureTimer / 120;
+        ctx.fillStyle = 'rgba(255,255,0,0.5)';
+        ctx.fillRect(sx - 15, GROUND_Y - 30, 30 * pct, 3);
+    }
+}
+
+function drawBalloon(bl) {
+    if (!bl.alive) return;
+    const sx = bl.x + Math.sin(bl.sway) * 8 - G.cam.x;
+    const sy = bl.y;
+    if (sx < -30 || sx > CW + 30) return;
+
+    // Cable
+    ctx.strokeStyle = '#888';
+    ctx.lineWidth = 1;
+    ctx.beginPath();
+    ctx.moveTo(bl.x - G.cam.x, GROUND_Y);
+    ctx.lineTo(sx, sy + 20);
+    ctx.stroke();
+
+    // Balloon body
+    ctx.fillStyle = '#556';
+    ctx.beginPath();
+    ctx.ellipse(sx, sy, 18, 25, 0, 0, Math.PI * 2);
+    ctx.fill();
+    // Highlight
+    ctx.fillStyle = '#778';
+    ctx.beginPath();
+    ctx.ellipse(sx - 5, sy - 8, 6, 10, 0, 0, Math.PI * 2);
+    ctx.fill();
+    // Fin
+    ctx.fillStyle = '#445';
+    ctx.beginPath();
+    ctx.moveTo(sx - 8, sy + 20);
+    ctx.lineTo(sx, sy + 25);
+    ctx.lineTo(sx + 8, sy + 20);
+    ctx.fill();
+}
+
+function drawBullets() {
+    for (const b of G.bullets) {
+        const sx = b.x - G.cam.x;
+        if (sx < -5 || sx > CW + 5) continue;
+        if (b.missile) {
+            // Missile: larger, white with orange trail
+            const ang = Math.atan2(b.vy, b.vx);
+            ctx.save();
+            ctx.translate(sx, b.y);
+            ctx.rotate(ang);
+            ctx.fillStyle = '#fff';
+            ctx.fillRect(-6, -2, 12, 4);
+            ctx.fillStyle = '#f80';
+            ctx.fillRect(-10, -1, 5, 2);
+            ctx.restore();
+            // Smoke trail
+            ctx.globalAlpha = 0.4;
+            ctx.fillStyle = '#aaa';
+            ctx.beginPath();
+            ctx.arc(sx - Math.cos(ang) * 12, b.y - Math.sin(ang) * 12, 3, 0, Math.PI * 2);
+            ctx.fill();
+            ctx.globalAlpha = 1;
+        } else {
+            ctx.fillStyle = b.owner === 'player' ? '#8f8' : '#f88';
+            ctx.fillRect(sx - 2, b.y - 1, 5, 2);
+        }
+    }
+}
+
+function drawBombs() {
+    for (const b of G.bombs) {
+        const sx = b.x - G.cam.x;
+        if (sx < -10 || sx > CW + 10) continue;
+        ctx.fillStyle = '#333';
+        ctx.beginPath();
+        ctx.ellipse(sx, b.y, 4, 6, 0, 0, Math.PI * 2);
+        ctx.fill();
+        // Orange tail
+        ctx.fillStyle = '#f80';
+        ctx.beginPath();
+        ctx.arc(sx, b.y - 7, 2, 0, Math.PI * 2);
+        ctx.fill();
+    }
+}
+
+function drawExplosions() {
+    for (const e of G.explosions) {
+        const sx = e.x - G.cam.x;
+        if (sx < -80 || sx > CW + 80) continue;
+        const grad = ctx.createRadialGradient(sx, e.y, 0, sx, e.y, e.radius);
+        grad.addColorStop(0, `rgba(255,255,255,${e.alpha})`);
+        grad.addColorStop(0.3, `rgba(255,200,50,${e.alpha * 0.8})`);
+        grad.addColorStop(0.6, `rgba(255,80,20,${e.alpha * 0.5})`);
+        grad.addColorStop(1, `rgba(255,0,0,0)`);
+        ctx.fillStyle = grad;
+        ctx.beginPath();
+        ctx.arc(sx, e.y, e.radius, 0, Math.PI * 2);
+        ctx.fill();
+    }
+}
+
+function drawParticles() {
+    for (const p of G.particles) {
+        const sx = p.x - G.cam.x;
+        ctx.fillStyle = p.color;
+        ctx.globalAlpha = p.life / 30;
+        ctx.fillRect(sx - p.sz/2, p.y - p.sz/2, p.sz, p.sz);
+    }
+    ctx.globalAlpha = 1;
+}
+
+function drawParachuters() {
+    for (const p of G.parachuters) {
+        const sx = p.x - G.cam.x;
+        // Parachute
+        ctx.fillStyle = '#fff';
+        ctx.beginPath();
+        ctx.arc(sx, p.y - 15, 10, Math.PI, 0);
+        ctx.fill();
+        // Lines
+        ctx.strokeStyle = '#aaa';
+        ctx.lineWidth = 1;
+        ctx.beginPath();
+        ctx.moveTo(sx - 9, p.y - 15);
+        ctx.lineTo(sx, p.y);
+        ctx.moveTo(sx + 9, p.y - 15);
+        ctx.lineTo(sx, p.y);
+        ctx.stroke();
+        // Figure
+        ctx.fillStyle = '#6c6';
+        ctx.beginPath();
+        ctx.arc(sx, p.y + 2, 3, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.strokeStyle = '#6c6';
+        ctx.lineWidth = 2;
+        ctx.beginPath();
+        ctx.moveTo(sx, p.y + 5);
+        ctx.lineTo(sx, p.y + 10);
+        ctx.stroke();
+    }
+}
+
+// --- HUD ---
+function drawHUD() {
+    const h = G.heli;
+
+    // Money top-left (hidden on mobile - shown in HTML overlay)
+    if (!isMobile) {
+        ctx.fillStyle = '#0f0';
+        ctx.font = 'bold 18px monospace';
+        ctx.textAlign = 'left';
+        ctx.fillText('$' + G.money, 15, 25);
+
+        ctx.font = '11px monospace';
+        ctx.fillStyle = '#8f8';
+        ctx.fillText('AMMO: ' + h.ammo + '/' + h.maxAmmo, 15, 42);
+        ctx.fillText('MISSILES: ' + h.missiles, 15, 55);
+    }
+
+    // Top center - three HP bars
+    const barW = 120, barH = 12, barY = 12;
+    const cx = CW / 2 - 60;
+
+    // Player base HP
+    ctx.fillStyle = '#333';
+    ctx.fillRect(cx - barW * 1.6, barY, barW, barH);
+    ctx.fillStyle = '#0a0';
+    ctx.fillRect(cx - barW * 1.6, barY, barW * (G.playerBase.hp / G.playerBase.maxHP), barH);
+    ctx.strokeStyle = '#0f0';
+    ctx.lineWidth = 1;
+    ctx.strokeRect(cx - barW * 1.6, barY, barW, barH);
+    ctx.fillStyle = '#0f0';
+    ctx.font = '9px monospace';
+    ctx.textAlign = 'center';
+    ctx.fillText('YOUR BASE', cx - barW * 1.6 + barW/2, barY + barH + 11);
+
+    // Heli HP (center)
+    ctx.fillStyle = '#333';
+    ctx.fillRect(cx - barW/2, barY, barW, barH);
+    const heliPct = h.alive ? h.hp / h.maxHP : 0;
+    ctx.fillStyle = heliPct > 0.5 ? '#0a0' : heliPct > 0.25 ? '#aa0' : '#a00';
+    ctx.fillRect(cx - barW/2, barY, barW * heliPct, barH);
+    ctx.strokeStyle = '#fff';
+    ctx.strokeRect(cx - barW/2, barY, barW, barH);
+    ctx.fillStyle = '#fff';
+    ctx.fillText('HELICOPTER', cx, barY + barH + 11);
+
+    // Enemy base HP
+    ctx.fillStyle = '#333';
+    ctx.fillRect(cx + barW * 0.6, barY, barW, barH);
+    ctx.fillStyle = '#a00';
+    ctx.fillRect(cx + barW * 0.6, barY, barW * (G.enemyBase.hp / G.enemyBase.maxHP), barH);
+    ctx.strokeStyle = '#f00';
+    ctx.strokeRect(cx + barW * 0.6, barY, barW, barH);
+    ctx.fillStyle = '#f00';
+    ctx.fillText('ENEMY BASE', cx + barW * 0.6 + barW/2, barY + barH + 11);
+
+    // Top-right: control hints (hidden on mobile)
+    if (!isMobile) {
+        ctx.fillStyle = '#ff0';
+        ctx.font = '10px monospace';
+        ctx.textAlign = 'right';
+        ctx.fillText('WASD:Fly  SPACE:Shoot  B:Bomb', CW - 15, 14);
+        ctx.fillText('M:Missile  E:Drop  F:Pickup', CW - 15, 27);
+        ctx.fillText('1-4:Buy  TAB:Shop  ESC:Pause', CW - 15, 40);
+    }
+
+    // Bottom bar
+    ctx.fillStyle = 'rgba(0,0,0,0.7)';
+    ctx.fillRect(0, CH - 50, CW, 50);
+
+    // Bombs bar
+    ctx.fillStyle = '#0a0';
+    ctx.font = 'bold 11px monospace';
+    ctx.textAlign = 'left';
+    ctx.fillText('BOMBS:', 15, CH - 33);
+    ctx.fillStyle = '#030';
+    ctx.fillRect(75, CH - 40, 80, 10);
+    ctx.fillStyle = '#0f0';
+    ctx.fillRect(75, CH - 40, 80 * (h.bombs / h.maxBombs), 10);
+    ctx.strokeStyle = '#0a0';
+    ctx.strokeRect(75, CH - 40, 80, 10);
+    ctx.fillStyle = '#0f0';
+    ctx.fillText(h.bombs + '', 160, CH - 31);
+
+    // Troops bar
+    ctx.fillStyle = '#a00';
+    ctx.fillText('TROOPS:', 15, CH - 15);
+    ctx.fillStyle = '#300';
+    ctx.fillRect(75, CH - 22, 80, 10);
+    ctx.fillStyle = '#f00';
+    ctx.fillRect(75, CH - 22, 80 * (h.troops / h.maxTroops), 10);
+    ctx.strokeStyle = '#a00';
+    ctx.strokeRect(75, CH - 22, 80, 10);
+    ctx.fillStyle = '#f00';
+    ctx.fillText(h.troops + '', 160, CH - 13);
+
+    // Lives - center bottom
+    ctx.fillStyle = '#fff';
+    ctx.font = 'bold 11px monospace';
+    ctx.textAlign = 'center';
+    ctx.fillText('LIVES:', CW/2 - 40, CH - 22);
+    for (let i = 0; i < G.lives; i++) {
+        // Small heli icon
+        const lx = CW/2 - 10 + i * 25;
+        const ly = CH - 27;
+        ctx.fillStyle = '#0f0';
+        ctx.beginPath();
+        ctx.ellipse(lx, ly, 8, 4, 0, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.strokeStyle = '#8f8';
+        ctx.lineWidth = 1;
+        ctx.beginPath();
+        ctx.moveTo(lx - 7, ly - 5);
+        ctx.lineTo(lx + 7, ly - 5);
+        ctx.stroke();
+    }
+
+    // Unit purchase hints - bottom right (hidden on mobile - touch buttons replace)
+    if (!isMobile) {
+        ctx.font = '10px monospace';
+        ctx.textAlign = 'left';
+        const buyX = CW/2 + 100;
+        const items = [
+            ['[1] Infantry $50', G.money >= 50],
+            ['[2] Tank $200', G.money >= 200],
+            ['[3] AA $175', G.money >= 175],
+            ['[4] Van $400', G.money >= 400]
+        ];
+        for (let i = 0; i < items.length; i++) {
+            ctx.fillStyle = items[i][1] ? '#8f8' : '#555';
+            ctx.fillText(items[i][0], buyX + i * 105, CH - 22);
+        }
+        ctx.fillStyle = '#8ff';
+        ctx.fillText('[TAB] Shop', CW - 85, CH - 8);
+    }
+}
+
+// --- OVERLAYS ---
+function drawBriefing() {
+    ctx.fillStyle = 'rgba(0,0,0,0.8)';
+    ctx.fillRect(0, 0, CW, CH);
+
+    ctx.textAlign = 'center';
+
+    ctx.fillStyle = '#888';
+    ctx.font = '16px monospace';
+    ctx.fillText('MISSION ' + (G.mi + 1) + ' OF 6', CW/2, CH/2 - 80);
+
+    ctx.fillStyle = '#0ff';
+    ctx.font = 'bold 36px monospace';
+    ctx.fillText(G.mission.name, CW/2, CH/2 - 35);
+
+    ctx.fillStyle = '#aaa';
+    ctx.font = '14px monospace';
+    ctx.fillText(G.mission.desc, CW/2, CH/2 - 5);
+
+    ctx.fillStyle = '#888';
+    ctx.font = '12px monospace';
+    ctx.fillText('Enemy Forces: ' + G.mission.enemyBaseHP + ' HP base | Intel: ' + Math.round(G.mission.aggression * 100) + '% aggression', CW/2, CH/2 + 30);
+    ctx.fillText('Your Resources: $' + G.mission.startMoney + ' | Base HP: ' + G.mission.playerBaseHP, CW/2, CH/2 + 50);
+
+    // Blinking "Press SPACE"
+    if (Math.floor(G.frame / 30) % 2 === 0) {
+        ctx.fillStyle = '#0ff';
+        ctx.font = '14px monospace';
+        ctx.fillText('Press SPACE to begin mission', CW/2, CH/2 + 90);
+    }
+}
+
+function drawPaused() {
+    ctx.fillStyle = 'rgba(0,0,0,0.6)';
+    ctx.fillRect(0, 0, CW, CH);
+
+    ctx.textAlign = 'center';
+    ctx.fillStyle = '#fff';
+    ctx.font = 'bold 40px monospace';
+    ctx.fillText('PAUSED', CW/2, CH/2 - 10);
+    ctx.font = '16px monospace';
+    ctx.fillStyle = '#aaa';
+    ctx.fillText('Press ESC to resume', CW/2, CH/2 + 30);
+}
+
+function drawDefeated() {
+    ctx.fillStyle = 'rgba(0,0,0,0.7)';
+    ctx.fillRect(0, 0, CW, CH);
+
+    ctx.textAlign = 'center';
+    ctx.fillStyle = '#f33';
+    ctx.font = 'bold 48px monospace';
+    ctx.fillText('DEFEATED', CW/2, CH/2 - 20);
+    ctx.fillStyle = '#ccc';
+    ctx.font = '16px monospace';
+    ctx.fillText('Your helicopter was destroyed!', CW/2, CH/2 + 20);
+    ctx.fillText('Final Score: $' + G.score, CW/2, CH/2 + 50);
+    ctx.fillStyle = '#888';
+    ctx.font = '14px monospace';
+    ctx.fillText('Press R to retry', CW/2, CH/2 + 80);
+}
+
+function drawVictory() {
+    ctx.fillStyle = 'rgba(0,0,0,0.7)';
+    ctx.fillRect(0, 0, CW, CH);
+
+    ctx.textAlign = 'center';
+    ctx.fillStyle = '#0f0';
+    ctx.font = 'bold 48px monospace';
+    ctx.fillText('VICTORY!', CW/2, CH/2 - 20);
+    ctx.fillStyle = '#ccc';
+    ctx.font = '16px monospace';
+    ctx.fillText('All missions completed!', CW/2, CH/2 + 20);
+    ctx.fillText('Final Score: $' + G.score, CW/2, CH/2 + 50);
+    ctx.fillStyle = '#888';
+    ctx.font = '14px monospace';
+    ctx.fillText('Press R to play again', CW/2, CH/2 + 80);
+}
+
+function drawMissionComplete() {
+    ctx.fillStyle = 'rgba(0,0,0,0.6)';
+    ctx.fillRect(0, 0, CW, CH);
+
+    ctx.textAlign = 'center';
+    ctx.fillStyle = '#0f0';
+    ctx.font = 'bold 40px monospace';
+    ctx.fillText('MISSION COMPLETE!', CW/2, CH/2 - 10);
+    ctx.fillStyle = '#aaa';
+    ctx.font = '14px monospace';
+    ctx.fillText('Press SPACE for next mission', CW/2, CH/2 + 30);
+}
+
+function drawShop() {
+    if (!G.showShop) return;
+
+    const sw = 420, sh = 280;
+    const sx = (CW - sw) / 2, sy = (CH - sh) / 2;
+
+    ctx.fillStyle = 'rgba(0,0,20,0.9)';
+    ctx.fillRect(sx, sy, sw, sh);
+    ctx.strokeStyle = '#0ff';
+    ctx.lineWidth = 2;
+    ctx.strokeRect(sx, sy, sw, sh);
+
+    ctx.textAlign = 'center';
+    ctx.fillStyle = '#0ff';
+    ctx.font = 'bold 24px monospace';
+    ctx.fillText('SHOP', CW/2, sy + 35);
+
+    ctx.fillStyle = '#0f0';
+    ctx.font = '14px monospace';
+    ctx.fillText('Available: $' + G.money, CW/2, sy + 60);
+
+    const items = [
+        { key: '1', name: 'Infantry', cost: 50, desc: 'Fast light troops, can be airlifted' },
+        { key: '2', name: 'Tank', cost: 200, desc: 'Heavy armor, strong firepower' },
+        { key: '3', name: 'AA Battery', cost: 175, desc: 'Anti-air, targets enemy helicopters' },
+        { key: '4', name: 'Demo Van', cost: 400, desc: 'Destroys enemy base on contact!' }
+    ];
+
+    ctx.textAlign = 'left';
+    for (let i = 0; i < items.length; i++) {
+        const it = items[i];
+        const iy = sy + 85 + i * 40;
+        const afford = G.money >= it.cost;
+
+        ctx.fillStyle = afford ? '#fff' : '#555';
+        ctx.font = 'bold 14px monospace';
+        ctx.fillText('[' + it.key + '] ' + it.name, sx + 20, iy);
+
+        ctx.fillStyle = afford ? '#0f0' : '#555';
+        ctx.fillText('$' + it.cost, sx + 200, iy);
+
+        ctx.fillStyle = afford ? '#aaa' : '#444';
+        ctx.font = '11px monospace';
+        ctx.fillText(it.desc, sx + 20, iy + 16);
+    }
+
+    ctx.textAlign = 'center';
+    ctx.fillStyle = '#888';
+    ctx.font = '12px monospace';
+    ctx.fillText(isMobile ? 'Tap SHOP to close' : 'Press TAB to close', CW/2, sy + sh - 15);
+}
+
+// --- MINIMAP ---
+function drawMinimap() {
+    const mw = 160, mh = 12;
+    const mx = CW / 2 - mw / 2, my = CH - 50;
+
+    // Removed - bottom bar covers this area. Minimap not in reference screenshots.
+}
+
+// ================== MAIN RENDER ==================
+function render() {
+    ctx.clearRect(0, 0, CW, CH);
+
+    drawSky();
+    drawStars();
+    drawGround();
+    drawTrees();
+
+    // Balloons
+    for (const bl of G.balloons) drawBalloon(bl);
+
+    // Bases
+    drawEnemyBase();
+    drawPlayerBase();
+
+    // Bunkers
+    for (const bk of G.bunkers) drawBunker(bk);
+
+    // Units
+    for (const u of G.playerUnits) drawUnit(u, true);
+    for (const u of G.enemyUnits) drawUnit(u, false);
+
+    // Enemy helis
+    for (const eh of G.enemyHelis) {
+        if (eh.alive) drawHeli(eh.x, eh.y, eh.facing, eh.vx * 0.04, G.frame * 0.4, false, 0, 0, 0);
+    }
+
+    // Player heli
+    if (G.heli.alive) {
+        drawHeli(G.heli.x, G.heli.y, G.heli.facing, G.heli.tilt, G.heli.rotorAng, true, G.heli.invTimer, G.heli.muzzleFlash, G.heli.troops);
+    }
+
+    // Projectiles
+    drawBullets();
+    drawBombs();
+    drawParachuters();
+    drawExplosions();
+    drawParticles();
+
+    // HUD (always visible during gameplay)
+    if (G.state !== 'briefing') drawHUD();
+
+    // Overlays
+    if (G.state === 'briefing') drawBriefing();
+    else if (G.state === 'paused') drawPaused();
+    else if (G.state === 'defeated') drawDefeated();
+    else if (G.state === 'victory') drawVictory();
+    else if (G.state === 'missionComplete') drawMissionComplete();
+
+    drawShop();
+}
+
+// ================== GAME LOOP ==================
+function gameLoop(timestamp) {
+    // Simple fixed timestep at ~60fps
+    update();
+    render();
+
+    // Increment frame even during non-playing states (for animations)
+    if (G.state === 'briefing') G.frame++;
+
+    requestAnimationFrame(gameLoop);
+}
+
+// --- INIT ---
+initGame(0);
+requestAnimationFrame(gameLoop);
+
+// ====== MOBILE TOUCH CONTROLS JS ======
+
+if (isMobile) {
+    document.getElementById('touch-controls').style.display = 'block';
+    initTouchControls();
+}
+
+function initTouchControls() {
+    // --- Joystick via nipplejs ---
+    let joystickInstance = null;
+
+    function createJoystick() {
+        if (joystickInstance) joystickInstance.destroy();
+        joystickInstance = nipplejs.create({
+            zone: document.getElementById('tc-joystick-zone'),
+            mode: 'static',
+            position: { left: '50%', top: '50%' },
+            color: '#0f0',
+            size: 120,
+            threshold: 0.15,
+            fadeTime: 100,
+            restOpacity: 0.5
+        });
+
+        joystickInstance.on('move', (evt, data) => {
+            const angle = data.angle.radian;
+            const force = data.force;
+            if (force < 0.15) {
+                keys['w'] = keys['s'] = keys['a'] = keys['d'] = false;
+                return;
+            }
+            const dx = Math.cos(angle);
+            const dy = Math.sin(angle);
+            const t = 0.38;
+            keys['d'] = dx > t;
+            keys['a'] = dx < -t;
+            keys['w'] = dy > t;
+            keys['s'] = dy < -t;
+        });
+
+        joystickInstance.on('end', () => {
+            keys['w'] = keys['s'] = keys['a'] = keys['d'] = false;
+        });
+    }
+    createJoystick();
+
+    // --- Touch button helper ---
+    // Track touch identifiers per button to handle multi-touch correctly
+    function setupHoldButton(id, keyName) {
+        const btn = document.getElementById(id);
+        btn.addEventListener('touchstart', (e) => {
+            e.preventDefault();
+            btn.dataset.touchId = e.changedTouches[0].identifier;
+            keys[keyName] = true;
+            btn.classList.add('pressed');
+            if (audioCtx.state === 'suspended') audioCtx.resume();
+        }, { passive: false });
+        btn.addEventListener('touchend', (e) => {
+            e.preventDefault();
+            for (const t of e.changedTouches) {
+                if (t.identifier == btn.dataset.touchId) {
+                    keys[keyName] = false;
+                    btn.classList.remove('pressed');
+                    delete btn.dataset.touchId;
+                }
+            }
+        }, { passive: false });
+        btn.addEventListener('touchcancel', () => {
+            keys[keyName] = false;
+            btn.classList.remove('pressed');
+            delete btn.dataset.touchId;
+        });
+    }
+
+    function setupTapButton(id, callback) {
+        const btn = document.getElementById(id);
+        btn.addEventListener('touchstart', (e) => {
+            e.preventDefault();
+            btn.classList.add('pressed');
+            if (audioCtx.state === 'suspended') audioCtx.resume();
+        }, { passive: false });
+        btn.addEventListener('touchend', (e) => {
+            e.preventDefault();
+            btn.classList.remove('pressed');
+            if (G.state === 'playing') callback();
+        }, { passive: false });
+        btn.addEventListener('touchcancel', () => {
+            btn.classList.remove('pressed');
+        });
+    }
+
+    // --- Action buttons (hold = key down while touching) ---
+    setupHoldButton('tc-shoot', ' ');    // Space = shoot
+    setupHoldButton('tc-drop', 'e');      // E = drop troops
+    setupHoldButton('tc-missile', 'm');   // M = missile
+
+    // --- Bomb: tap to press+release (one bomb per tap) ---
+    setupTapButton('tc-bomb-active', () => {
+        keys['b'] = true;
+        requestAnimationFrame(() => { keys['b'] = false; });
+    });
+
+    // --- Pickup: tap action ---
+    setupTapButton('tc-pickup', () => {
+        pickupTroops();
+    });
+
+    // --- Deploy buttons: tap to buy ---
+    setupTapButton('tc-deploy1', () => buyUnit('infantry'));
+    setupTapButton('tc-deploy2', () => buyUnit('tank'));
+    setupTapButton('tc-deploy3', () => buyUnit('aa'));
+    setupTapButton('tc-deploy4', () => buyUnit('van'));
+
+    // --- Utility buttons ---
+    const pauseBtn = document.getElementById('tc-pause');
+    pauseBtn.addEventListener('touchstart', (e) => {
+        e.preventDefault();
+        pauseBtn.classList.add('pressed');
+    }, { passive: false });
+    pauseBtn.addEventListener('touchend', (e) => {
+        e.preventDefault();
+        pauseBtn.classList.remove('pressed');
+        if (G.state === 'playing') G.state = 'paused';
+        else if (G.state === 'paused') G.state = 'playing';
+    }, { passive: false });
+
+    const shopBtn = document.getElementById('tc-shop');
+    shopBtn.addEventListener('touchstart', (e) => {
+        e.preventDefault();
+        shopBtn.classList.add('pressed');
+    }, { passive: false });
+    shopBtn.addEventListener('touchend', (e) => {
+        e.preventDefault();
+        shopBtn.classList.remove('pressed');
+        if (G.state === 'playing') G.showShop = !G.showShop;
+    }, { passive: false });
+
+    // --- State overlay buttons ---
+    function setupStateBtn(id, callback) {
+        const btn = document.getElementById(id);
+        btn.addEventListener('touchstart', (e) => {
+            e.preventDefault();
+            if (audioCtx.state === 'suspended') audioCtx.resume();
+        }, { passive: false });
+        btn.addEventListener('touchend', (e) => {
+            e.preventDefault();
+            callback();
+        }, { passive: false });
+    }
+
+    setupStateBtn('tc-start', () => {
+        if (G.state === 'briefing') G.state = 'playing';
+    });
+    setupStateBtn('tc-resume', () => {
+        if (G.state === 'paused') G.state = 'playing';
+    });
+    setupStateBtn('tc-restart', () => {
+        if (G.state === 'defeated') initGame(G.mi);
+    });
+    setupStateBtn('tc-play-again', () => {
+        if (G.state === 'victory') initGame(0);
+    });
+    setupStateBtn('tc-next', () => {
+        if (G.state === 'missionComplete') initGame(G.mi + 1);
+    });
+
+    // --- Lefty / Righty swap ---
+    const tc = document.getElementById('touch-controls');
+    const handBtn = document.getElementById('tc-hand-toggle');
+    if (localStorage.getItem('rr-hand-pref') === 'left') {
+        tc.classList.add('lefty');
+    }
+    handBtn.addEventListener('touchend', (e) => {
+        e.preventDefault();
+        tc.classList.toggle('lefty');
+        const isLefty = tc.classList.contains('lefty');
+        localStorage.setItem('rr-hand-pref', isLefty ? 'left' : 'right');
+        // Recreate joystick in new position
+        createJoystick();
+    });
+
+    // --- Per-frame touch HUD updates ---
+    let _prevMoney = -1, _prevAmmo = -1, _prevMaxAmmo = -1, _prevMsl = -1;
+    const hudMoney = document.getElementById('tc-hud-money');
+    const hudAmmo = document.getElementById('tc-hud-ammo');
+    const hudMsl = document.getElementById('tc-hud-missiles');
+    const deploy1 = document.getElementById('tc-deploy1');
+    const deploy2 = document.getElementById('tc-deploy2');
+    const deploy3 = document.getElementById('tc-deploy3');
+    const deploy4 = document.getElementById('tc-deploy4');
+    const actionBtns = document.getElementById('tc-action-buttons');
+    const leftBtns = document.getElementById('tc-left-buttons');
+    const joystickZone = document.getElementById('tc-joystick-zone');
+    const stateOverlay = document.getElementById('tc-state-overlay');
+    const stStart = document.getElementById('tc-start');
+    const stRestart = document.getElementById('tc-restart');
+    const stNext = document.getElementById('tc-next');
+    const stResume = document.getElementById('tc-resume');
+    const stPlayAgain = document.getElementById('tc-play-again');
+
+    // Override the original render to add touch HUD sync
+    const _origRender = render;
+    render = function() {
+        _origRender();
+        updateTouchUI();
+    };
+
+    function updateTouchUI() {
+        const h = G.heli;
+
+        // Update HUD values with change detection
+        if (G.money !== _prevMoney) {
+            hudMoney.textContent = '$' + G.money;
+            _prevMoney = G.money;
+        }
+        if (h.ammo !== _prevAmmo || h.maxAmmo !== _prevMaxAmmo) {
+            hudAmmo.textContent = 'AMMO: ' + h.ammo + '/' + h.maxAmmo;
+            _prevAmmo = h.ammo;
+            _prevMaxAmmo = h.maxAmmo;
+        }
+        if (h.missiles !== _prevMsl) {
+            hudMsl.textContent = 'MISSILES: ' + h.missiles;
+            _prevMsl = h.missiles;
+        }
+
+        // Deploy button affordability
+        deploy1.classList.toggle('too-expensive', G.money < 50);
+        deploy2.classList.toggle('too-expensive', G.money < 200);
+        deploy3.classList.toggle('too-expensive', G.money < 175);
+        deploy4.classList.toggle('too-expensive', G.money < 400);
+
+        // Show/hide controls based on game state
+        const playing = G.state === 'playing';
+        actionBtns.style.display = playing ? 'grid' : 'none';
+        leftBtns.style.display = playing ? 'flex' : 'none';
+        joystickZone.style.display = playing ? 'block' : 'none';
+
+        // State overlay buttons
+        stStart.classList.toggle('visible', G.state === 'briefing');
+        stResume.classList.toggle('visible', G.state === 'paused');
+        stRestart.classList.toggle('visible', G.state === 'defeated');
+        stPlayAgain.classList.toggle('visible', G.state === 'victory');
+        stNext.classList.toggle('visible', G.state === 'missionComplete');
+    }
+
+    // Prevent default touch on canvas to avoid scrolling
+    canvas.addEventListener('touchstart', (e) => e.preventDefault(), { passive: false });
+    canvas.addEventListener('touchmove', (e) => e.preventDefault(), { passive: false });
+}
+
+</script>
+</body>
+</html>

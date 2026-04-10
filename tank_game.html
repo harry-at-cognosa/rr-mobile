@@ -1,0 +1,1188 @@
+<!DOCTYPE html>
+<!--
+  Tank Battle Game v11
+  Generated: 260114:100000
+  Version notes: 
+    v11 - P key to switch tank control, fixed dual-control bug, reload display fix,
+          game timer with best time tracking
+    v10 - Sound effects (shots, block destroy, tank destroy), pause on blur with C to continue
+    v9  - 4 tanks per team (2 active + 2 reserve), spawn delay 1.5s, spawn invulnerability 2s
+    v8  - Player control transfer, 28px tank, 1.5° rotation, blur fix for stuck keys
+-->
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Tank Battle v11</title>
+  <style>
+    * {
+      margin: 0;
+      padding: 0;
+      box-sizing: border-box;
+    }
+
+    body {
+      min-height: 100vh;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      background-color: #1a1a2e;
+      font-family: 'Courier New', monospace;
+      padding: 20px;
+    }
+
+    h1 {
+      color: #eee;
+      font-size: 2rem;
+      margin-bottom: 1rem;
+      letter-spacing: 2px;
+    }
+
+    .game-container {
+      display: flex;
+      gap: 20px;
+      align-items: flex-start;
+    }
+
+    canvas {
+      border: 3px solid #444;
+      background-color: #2a2a3e;
+      display: block;
+    }
+
+    .info-panel {
+      background-color: #2a2a3e;
+      border: 2px solid #444;
+      padding: 15px;
+      width: 280px;
+      color: #ccc;
+    }
+
+    .info-panel h2 {
+      color: #4ade80;
+      font-size: 1.1rem;
+      margin-bottom: 10px;
+      border-bottom: 1px solid #444;
+      padding-bottom: 5px;
+    }
+
+    .info-panel h3 {
+      color: #fbbf24;
+      font-size: 0.95rem;
+      margin-top: 12px;
+      margin-bottom: 6px;
+    }
+
+    .info-panel p {
+      font-size: 0.85rem;
+      margin-bottom: 4px;
+      line-height: 1.4;
+    }
+
+    .info-panel .key {
+      color: #60a5fa;
+      font-weight: bold;
+    }
+
+    .status-bar {
+      display: flex;
+      justify-content: space-between;
+      margin-top: 15px;
+      padding-top: 10px;
+      border-top: 1px solid #444;
+    }
+
+    .team-status {
+      text-align: center;
+    }
+
+    .team-status.red { color: #f87171; }
+    .team-status.blue { color: #60a5fa; }
+
+    .hint {
+      color: #6b7280;
+      font-size: 0.8rem;
+      margin-top: 1rem;
+      text-align: center;
+    }
+  </style>
+</head>
+<body>
+  <h1>⚔️ TANK BATTLE ⚔️</h1>
+
+  <div class="game-container">
+    <canvas id="gameCanvas"></canvas>
+
+    <div class="info-panel">
+      <h2>CONTROLS (v11)</h2>
+      <p><span class="key">W</span> - Move forward</p>
+      <p><span class="key">S</span> - Move backward</p>
+      <p><span class="key">A</span> - Rotate left</p>
+      <p><span class="key">D</span> - Rotate right</p>
+      <p><span class="key">SPACE</span> - Fire</p>
+      <p><span class="key">P</span> - Switch tank control</p>
+      <p><span class="key">C</span> - Continue (when paused)</p>
+      <p><span class="key">R</span> - Restart game</p>
+
+      <h3>TIMER</h3>
+      <p>Time: <span class="key" id="gameTimer">00:00</span></p>
+      <p>Best: <span class="key" id="bestTime">--:--</span></p>
+
+      <h3>OBJECTIVE</h3>
+      <p>Destroy all 4 enemy tanks before they destroy your team.</p>
+
+      <h3>MECHANICS</h3>
+      <p>• Tanks take <span class="key">3 hits</span> to destroy</p>
+      <p>• Walls take <span class="key">4 hits</span> to destroy</p>
+      <p>• Magazine holds <span class="key">4 shots</span></p>
+      <p>• Fire rate: <span class="key">2 shots/sec</span></p>
+      <p>• Reload time: <span class="key">0.4 sec</span></p>
+      <p>• Game pauses when window loses focus</p>
+
+      <h3>TEAMS</h3>
+      <p><span style="color:#f87171">■ RED TEAM</span> - You + AI ally</p>
+      <p><span style="color:#60a5fa">■ BLUE TEAM</span> - Enemy AI × 2</p>
+
+      <div class="status-bar">
+        <div class="team-status red">
+          <div>RED TEAM</div>
+          <div id="redActive">Active: ●●</div>
+          <div id="redReserve">Reserve: ●●</div>
+        </div>
+        <div class="team-status blue">
+          <div>BLUE TEAM</div>
+          <div id="blueActive">Active: ●●</div>
+          <div id="blueReserve">Reserve: ●●</div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <p class="hint">Click the game area to focus, then use controls</p>
+
+  <script>
+    /**
+     * =============================================================================
+     * TANK BATTLE - CONFIGURABLE PARAMETERS
+     * =============================================================================
+     * Adjust these values to tune gameplay. All parameters are documented below.
+     */
+
+    const CONFIG = {
+      // ==========================================================================
+      // RESERVE & SPAWN SETTINGS
+      // ==========================================================================
+      RESERVE_TANKS: 2,       // Number of reserve tanks per team
+      SPAWN_DELAY: 1500,      // Ms delay before reserve tank spawns
+      SPAWN_INVULNERABILITY: 2000, // Ms of invulnerability after spawning
+
+      // ==========================================================================
+      // ARENA SETTINGS
+      // ==========================================================================
+      GRID_SIZE: 15,          // Number of cells in each dimension (15x15 grid)
+      CELL_SIZE: 40,          // Pixel size of each grid cell
+      WALL_DENSITY: 0.22,     // Probability of a cell being a wall (0.0 - 1.0)
+      WALL_HEALTH: 4,         // Hits required to destroy a wall
+
+      // ==========================================================================
+      // TANK SETTINGS
+      // ==========================================================================
+      TANK_HEALTH: 3,         // Hits required to destroy a tank
+      TANK_SPEED: 2.0,        // Movement speed (pixels per frame)
+      TANK_ROTATION_SPEED: 1.5, // Rotation speed (degrees per frame)
+      TANK_SIZE: 28,          // Tank body size in pixels (< CELL_SIZE to fit through 1-block gaps)
+
+      // ==========================================================================
+      // WEAPON SETTINGS
+      // ==========================================================================
+      MAGAZINE_SIZE: 4,       // Shots before reload required
+      FIRE_RATE: 500,         // Minimum ms between shots (2 shots/sec = 500ms)
+      RELOAD_TIME: 400,       // Ms to reload magazine when empty
+      BULLET_SPEED: 6,        // Bullet travel speed (pixels per frame)
+      BULLET_SIZE: 6,         // Bullet radius in pixels
+
+      // ==========================================================================
+      // AI SETTINGS
+      // ==========================================================================
+      AI_REACTION_TIME: 300,  // Ms delay before AI makes decisions
+      AI_ACCURACY: 0.85,      // Probability AI will aim correctly (0.0 - 1.0)
+      AI_AGGRESSION: 0.7,     // How likely AI pursues vs patrols (0.0 - 1.0)
+      AI_FIRE_RANGE: 300,     // Max pixel distance AI will attempt to fire
+      AI_PATH_UPDATE: 500,    // Ms between AI pathfinding updates
+
+      // ==========================================================================
+      // VISUAL SETTINGS
+      // ==========================================================================
+      COLORS: {
+        FLOOR: '#3a3a4e',
+        GRID_LINE: '#2a2a3e',
+        WALL_FULL: '#888888',
+        WALL_DAMAGED: '#666666',
+        WALL_CRITICAL: '#444444',
+        RED_TANK: '#dc2626',
+        RED_TANK_LIGHT: '#f87171',
+        BLUE_TANK: '#2563eb',
+        BLUE_TANK_LIGHT: '#60a5fa',
+        BULLET_RED: '#fca5a5',
+        BULLET_BLUE: '#93c5fd',
+        EXPLOSION: '#fbbf24'
+      }
+    };
+
+    // =============================================================================
+    // GAME IMPLEMENTATION
+    // =============================================================================
+
+    const canvas = document.getElementById('gameCanvas');
+    const ctx = canvas.getContext('2d');
+    
+    // Set canvas size based on config
+    canvas.width = CONFIG.GRID_SIZE * CONFIG.CELL_SIZE;
+    canvas.height = CONFIG.GRID_SIZE * CONFIG.CELL_SIZE;
+
+    // Game state
+    let gameState = 'playing'; // 'playing', 'paused', 'redWins', 'blueWins'
+    let walls = [];
+    let tanks = [];
+    let bullets = [];
+    let explosions = [];
+    let keys = {};
+    
+    // Reserve tanks and spawn queue
+    let reserves = { red: CONFIG.RESERVE_TANKS, blue: CONFIG.RESERVE_TANKS };
+    let pendingSpawns = []; // { team, spawnTime, isPlayerControlled }
+    
+    // Pause state
+    let pausedTime = 0; // Track when game was paused for spawn timing
+    
+    // Game timer
+    let gameStartTime = 0;
+    let totalPausedDuration = 0;
+    let bestTime = null; // Best win time in ms, null if no wins yet
+
+    // =============================================================================
+    // SOUND SYSTEM
+    // =============================================================================
+    
+    let audioCtx = null;
+    
+    function initAudio() {
+      if (!audioCtx) {
+        audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+      }
+      if (audioCtx.state === 'suspended') {
+        audioCtx.resume();
+      }
+    }
+    
+    function playSound(frequency, duration, volume = 0.3, type = 'square') {
+      if (!audioCtx) return;
+      
+      const oscillator = audioCtx.createOscillator();
+      const gainNode = audioCtx.createGain();
+      
+      oscillator.connect(gainNode);
+      gainNode.connect(audioCtx.destination);
+      
+      oscillator.frequency.value = frequency;
+      oscillator.type = type;
+      
+      gainNode.gain.setValueAtTime(volume, audioCtx.currentTime);
+      gainNode.gain.exponentialRampToValueAtTime(0.01, audioCtx.currentTime + duration);
+      
+      oscillator.start(audioCtx.currentTime);
+      oscillator.stop(audioCtx.currentTime + duration);
+    }
+    
+    function playShotSound(team) {
+      initAudio();
+      if (team === 'red') {
+        // High-mid frequency tick for red team
+        playSound(880, 0.05, 0.2, 'square');
+      } else {
+        // Low frequency tick for blue team
+        playSound(220, 0.05, 0.2, 'square');
+      }
+    }
+    
+    function playBlockDestroySound() {
+      initAudio();
+      // Low volume, low frequency, triple "boo" soundc 
+      playSound(110, 0.15, 0.15, 'sine');
+      setTimeout(() => playSound(100, 0.15, 0.12, 'sine'), 150);
+      setTimeout(() => playSound(90, 0.2, 0.1, 'sine'), 300);
+    }
+    
+    function playTankDestroySound() {
+      initAudio();
+      // Higher volume, higher frequency explosion
+      playSound(440, 0.1, 0.4, 'sawtooth');
+      setTimeout(() => playSound(330, 0.15, 0.35, 'sawtooth'), 50);
+      setTimeout(() => playSound(220, 0.2, 0.3, 'sawtooth'), 100);
+      setTimeout(() => playSound(110, 0.3, 0.25, 'sine'), 150);
+    }
+
+    // =============================================================================
+    // UTILITY FUNCTIONS
+    // =============================================================================
+
+    function distance(x1, y1, x2, y2) {
+      return Math.sqrt((x2 - x1) ** 2 + (y2 - y1) ** 2);
+    }
+
+    function normalizeAngle(angle) {
+      while (angle < 0) angle += 360;
+      while (angle >= 360) angle -= 360;
+      return angle;
+    }
+
+    function toRadians(degrees) {
+      return degrees * Math.PI / 180;
+    }
+
+    function toDegrees(radians) {
+      return radians * 180 / Math.PI;
+    }
+
+    function angleTo(x1, y1, x2, y2) {
+      return toDegrees(Math.atan2(y2 - y1, x2 - x1));
+    }
+
+    function lineIntersectsRect(x1, y1, x2, y2, rx, ry, rw, rh) {
+      // Check if line segment intersects rectangle
+      const left = rx, right = rx + rw, top = ry, bottom = ry + rh;
+      
+      // Check if line is completely outside
+      if ((x1 < left && x2 < left) || (x1 > right && x2 > right)) return false;
+      if ((y1 < top && y2 < top) || (y1 > bottom && y2 > bottom)) return false;
+      
+      // Check line intersection with each edge
+      const m = (y2 - y1) / (x2 - x1);
+      
+      let y = m * (left - x1) + y1;
+      if (y >= top && y <= bottom) return true;
+      
+      y = m * (right - x1) + y1;
+      if (y >= top && y <= bottom) return true;
+      
+      let x = (top - y1) / m + x1;
+      if (x >= left && x <= right) return true;
+      
+      x = (bottom - y1) / m + x1;
+      if (x >= left && x <= right) return true;
+      
+      return false;
+    }
+
+    // =============================================================================
+    // ARENA GENERATION
+    // =============================================================================
+
+    function generateArena() {
+      walls = [];
+      
+      for (let row = 0; row < CONFIG.GRID_SIZE; row++) {
+        for (let col = 0; col < CONFIG.GRID_SIZE; col++) {
+          // Keep corners clear for tank spawns
+          const isCorner = (
+            (row < 3 && col < 3) ||
+            (row < 3 && col >= CONFIG.GRID_SIZE - 3) ||
+            (row >= CONFIG.GRID_SIZE - 3 && col < 3) ||
+            (row >= CONFIG.GRID_SIZE - 3 && col >= CONFIG.GRID_SIZE - 3)
+          );
+          
+          if (!isCorner && Math.random() < CONFIG.WALL_DENSITY) {
+            walls.push({
+              x: col * CONFIG.CELL_SIZE,
+              y: row * CONFIG.CELL_SIZE,
+              width: CONFIG.CELL_SIZE,
+              height: CONFIG.CELL_SIZE,
+              health: CONFIG.WALL_HEALTH,
+              maxHealth: CONFIG.WALL_HEALTH
+            });
+          }
+        }
+      }
+    }
+
+    // =============================================================================
+    // TANK CLASS
+    // =============================================================================
+
+    function createTank(x, y, angle, team, isPlayer, hasSpawnProtection = false) {
+      return {
+        x: x,
+        y: y,
+        angle: angle,
+        team: team,
+        isPlayer: isPlayer,
+        health: CONFIG.TANK_HEALTH,
+        maxHealth: CONFIG.TANK_HEALTH,
+        ammo: CONFIG.MAGAZINE_SIZE,
+        lastShotTime: 0,
+        reloading: false,
+        reloadStartTime: 0,
+        alive: true,
+        // Spawn protection
+        invulnerable: hasSpawnProtection,
+        spawnTime: hasSpawnProtection ? Date.now() : 0,
+        // AI state
+        aiTargetX: x,
+        aiTargetY: y,
+        aiLastPathUpdate: 0,
+        aiLastDecision: 0
+      };
+    }
+    
+    // Spawn point definitions
+    const SPAWN_POINTS = {
+      red: { x: null, y: null, angle: -45 },
+      blue: { x: null, y: null, angle: 135 }
+    };
+
+    function initTanks() {
+      tanks = [];
+      const margin = CONFIG.CELL_SIZE * 1.5;
+      const size = CONFIG.GRID_SIZE * CONFIG.CELL_SIZE;
+      
+      // Define spawn points
+      SPAWN_POINTS.red.x = margin;
+      SPAWN_POINTS.red.y = size - margin;
+      SPAWN_POINTS.blue.x = size - margin;
+      SPAWN_POINTS.blue.y = margin;
+      
+      // Red team (bottom-left area)
+      tanks.push(createTank(margin, size - margin, -45, 'red', true)); // Player
+      tanks.push(createTank(margin + CONFIG.CELL_SIZE * 2, size - margin - CONFIG.CELL_SIZE, -45, 'red', false)); // AI ally
+      
+      // Blue team (top-right area)
+      tanks.push(createTank(size - margin, margin, 135, 'blue', false));
+      tanks.push(createTank(size - margin - CONFIG.CELL_SIZE * 2, margin + CONFIG.CELL_SIZE, 135, 'blue', false));
+      
+      // Reset reserves and pending spawns
+      reserves = { red: CONFIG.RESERVE_TANKS, blue: CONFIG.RESERVE_TANKS };
+      pendingSpawns = [];
+    }
+
+    // =============================================================================
+    // DRAWING FUNCTIONS
+    // =============================================================================
+
+    function drawArena() {
+      // Floor
+      ctx.fillStyle = CONFIG.COLORS.FLOOR;
+      ctx.fillRect(0, 0, canvas.width, canvas.height);
+      
+      // Grid lines
+      ctx.strokeStyle = CONFIG.COLORS.GRID_LINE;
+      ctx.lineWidth = 1;
+      for (let i = 0; i <= CONFIG.GRID_SIZE; i++) {
+        const pos = i * CONFIG.CELL_SIZE;
+        ctx.beginPath();
+        ctx.moveTo(pos, 0);
+        ctx.lineTo(pos, canvas.height);
+        ctx.stroke();
+        ctx.beginPath();
+        ctx.moveTo(0, pos);
+        ctx.lineTo(canvas.width, pos);
+        ctx.stroke();
+      }
+    }
+
+    function drawWalls() {
+      walls.forEach(wall => {
+        if (wall.health <= 0) return;
+        
+        // Color based on health
+        const healthRatio = wall.health / wall.maxHealth;
+        if (healthRatio > 0.75) {
+          ctx.fillStyle = CONFIG.COLORS.WALL_FULL;
+        } else if (healthRatio > 0.25) {
+          ctx.fillStyle = CONFIG.COLORS.WALL_DAMAGED;
+        } else {
+          ctx.fillStyle = CONFIG.COLORS.WALL_CRITICAL;
+        }
+        
+        ctx.fillRect(wall.x + 2, wall.y + 2, wall.width - 4, wall.height - 4);
+        
+        // Damage cracks
+        if (wall.health < wall.maxHealth) {
+          ctx.strokeStyle = '#333';
+          ctx.lineWidth = 2;
+          const cx = wall.x + wall.width / 2;
+          const cy = wall.y + wall.height / 2;
+          
+          for (let i = 0; i < (wall.maxHealth - wall.health); i++) {
+            ctx.beginPath();
+            ctx.moveTo(cx + (i * 5 - 5), cy - 10);
+            ctx.lineTo(cx + (i * 3), cy + 10);
+            ctx.stroke();
+          }
+        }
+      });
+    }
+
+    function drawTank(tank) {
+      if (!tank.alive) return;
+      
+      // Check and update invulnerability status
+      if (tank.invulnerable && Date.now() - tank.spawnTime > CONFIG.SPAWN_INVULNERABILITY) {
+        tank.invulnerable = false;
+      }
+      
+      ctx.save();
+      ctx.translate(tank.x, tank.y);
+      ctx.rotate(toRadians(tank.angle));
+      
+      const size = CONFIG.TANK_SIZE;
+      const halfSize = size / 2;
+      
+      // Colors based on team
+      const mainColor = tank.team === 'red' ? CONFIG.COLORS.RED_TANK : CONFIG.COLORS.BLUE_TANK;
+      const lightColor = tank.team === 'red' ? CONFIG.COLORS.RED_TANK_LIGHT : CONFIG.COLORS.BLUE_TANK_LIGHT;
+      
+      // Tank body (rounded rectangle)
+      ctx.fillStyle = mainColor;
+      ctx.beginPath();
+      ctx.roundRect(-halfSize, -halfSize * 0.7, size, size * 0.7, 4);
+      ctx.fill();
+      
+      // Tank treads
+      ctx.fillStyle = '#333';
+      ctx.fillRect(-halfSize, -halfSize * 0.8, size, 4);
+      ctx.fillRect(-halfSize, halfSize * 0.5, size, 4);
+      
+      // Turret base (circle)
+      ctx.fillStyle = lightColor;
+      ctx.beginPath();
+      ctx.arc(0, 0, size * 0.3, 0, Math.PI * 2);
+      ctx.fill();
+      
+      // Gun barrel
+      ctx.fillStyle = '#444';
+      ctx.fillRect(0, -3, halfSize + 8, 6);
+      ctx.fillStyle = '#333';
+      ctx.fillRect(halfSize + 2, -4, 8, 8);
+      
+      // Health indicator
+      const healthRatio = tank.health / tank.maxHealth;
+      ctx.fillStyle = healthRatio > 0.66 ? '#4ade80' : healthRatio > 0.33 ? '#fbbf24' : '#ef4444';
+      ctx.fillRect(-halfSize, -halfSize - 8, size * healthRatio, 4);
+      ctx.strokeStyle = '#fff';
+      ctx.lineWidth = 1;
+      ctx.strokeRect(-halfSize, -halfSize - 8, size, 4);
+      
+      // Player indicator
+      if (tank.isPlayer) {
+        ctx.fillStyle = '#fff';
+        ctx.beginPath();
+        ctx.moveTo(0, -halfSize - 15);
+        ctx.lineTo(-5, -halfSize - 10);
+        ctx.lineTo(5, -halfSize - 10);
+        ctx.closePath();
+        ctx.fill();
+      }
+      
+      // Invulnerability shield effect (flashing circle)
+      if (tank.invulnerable) {
+        const flashRate = Math.sin(Date.now() / 100) * 0.3 + 0.5;
+        ctx.strokeStyle = `rgba(255, 255, 255, ${flashRate})`;
+        ctx.lineWidth = 3;
+        ctx.beginPath();
+        ctx.arc(0, 0, halfSize + 8, 0, Math.PI * 2);
+        ctx.stroke();
+      }
+      
+      ctx.restore();
+      
+      // Ammo indicator for player - check and update reload state
+      if (tank.isPlayer) {
+        // Check if reload is complete
+        if (tank.reloading && Date.now() - tank.reloadStartTime >= CONFIG.RELOAD_TIME) {
+          tank.reloading = false;
+          tank.ammo = CONFIG.MAGAZINE_SIZE;
+        }
+        
+        ctx.fillStyle = '#fff';
+        ctx.font = '12px monospace';
+        ctx.fillText(`Ammo: ${'●'.repeat(tank.ammo)}${'○'.repeat(CONFIG.MAGAZINE_SIZE - tank.ammo)}`, 10, 20);
+        if (tank.reloading) {
+          ctx.fillStyle = '#fbbf24';
+          ctx.fillText('RELOADING...', 10, 35);
+        }
+      }
+    }
+
+    function drawBullets() {
+      bullets.forEach(bullet => {
+        ctx.fillStyle = bullet.team === 'red' ? CONFIG.COLORS.BULLET_RED : CONFIG.COLORS.BULLET_BLUE;
+        ctx.beginPath();
+        ctx.arc(bullet.x, bullet.y, CONFIG.BULLET_SIZE, 0, Math.PI * 2);
+        ctx.fill();
+        
+        // Trail
+        ctx.strokeStyle = bullet.team === 'red' ? CONFIG.COLORS.RED_TANK : CONFIG.COLORS.BLUE_TANK;
+        ctx.lineWidth = 2;
+        ctx.beginPath();
+        ctx.moveTo(bullet.x, bullet.y);
+        ctx.lineTo(
+          bullet.x - Math.cos(toRadians(bullet.angle)) * 15,
+          bullet.y - Math.sin(toRadians(bullet.angle)) * 15
+        );
+        ctx.stroke();
+      });
+    }
+
+    function drawExplosions() {
+      explosions = explosions.filter(exp => {
+        const age = Date.now() - exp.startTime;
+        if (age > 300) return false;
+        
+        const progress = age / 300;
+        const radius = 20 * (1 + progress);
+        const alpha = 1 - progress;
+        
+        ctx.fillStyle = `rgba(251, 191, 36, ${alpha})`;
+        ctx.beginPath();
+        ctx.arc(exp.x, exp.y, radius, 0, Math.PI * 2);
+        ctx.fill();
+        
+        ctx.fillStyle = `rgba(255, 100, 50, ${alpha * 0.7})`;
+        ctx.beginPath();
+        ctx.arc(exp.x, exp.y, radius * 0.6, 0, Math.PI * 2);
+        ctx.fill();
+        
+        return true;
+      });
+    }
+
+    function drawGameOver() {
+      ctx.fillStyle = 'rgba(0, 0, 0, 0.7)';
+      ctx.fillRect(0, 0, canvas.width, canvas.height);
+      
+      ctx.textAlign = 'center';
+      ctx.font = 'bold 36px monospace';
+      
+      if (gameState === 'redWins') {
+        ctx.fillStyle = CONFIG.COLORS.RED_TANK_LIGHT;
+        ctx.fillText('RED TEAM WINS!', canvas.width / 2, canvas.height / 2 - 20);
+      } else {
+        ctx.fillStyle = CONFIG.COLORS.BLUE_TANK_LIGHT;
+        ctx.fillText('BLUE TEAM WINS!', canvas.width / 2, canvas.height / 2 - 20);
+      }
+      
+      ctx.font = '18px monospace';
+      ctx.fillStyle = '#fff';
+      ctx.fillText('Press R to restart', canvas.width / 2, canvas.height / 2 + 30);
+      
+      ctx.textAlign = 'left';
+    }
+
+    // =============================================================================
+    // GAME LOGIC
+    // =============================================================================
+
+    function checkWallCollision(x, y, radius) {
+      for (const wall of walls) {
+        if (wall.health <= 0) continue;
+        
+        const closestX = Math.max(wall.x, Math.min(x, wall.x + wall.width));
+        const closestY = Math.max(wall.y, Math.min(y, wall.y + wall.height));
+        const dist = distance(x, y, closestX, closestY);
+        
+        if (dist < radius) {
+          return wall;
+        }
+      }
+      return null;
+    }
+
+    function checkTankCollision(tank, newX, newY) {
+      const radius = CONFIG.TANK_SIZE / 2;
+      
+      // Wall collision
+      if (checkWallCollision(newX, newY, radius)) {
+        return true;
+      }
+      
+      // Boundary collision
+      if (newX < radius || newX > canvas.width - radius ||
+          newY < radius || newY > canvas.height - radius) {
+        return true;
+      }
+      
+      // Other tank collision
+      for (const other of tanks) {
+        if (other === tank || !other.alive) continue;
+        if (distance(newX, newY, other.x, other.y) < CONFIG.TANK_SIZE) {
+          return true;
+        }
+      }
+      
+      return false;
+    }
+
+    function hasLineOfSight(x1, y1, x2, y2) {
+      for (const wall of walls) {
+        if (wall.health <= 0) continue;
+        if (lineIntersectsRect(x1, y1, x2, y2, wall.x, wall.y, wall.width, wall.height)) {
+          return false;
+        }
+      }
+      return true;
+    }
+
+    function fireBullet(tank) {
+      const now = Date.now();
+      
+      // Check reload
+      if (tank.reloading) {
+        if (now - tank.reloadStartTime >= CONFIG.RELOAD_TIME) {
+          tank.reloading = false;
+          tank.ammo = CONFIG.MAGAZINE_SIZE;
+        } else {
+          return;
+        }
+      }
+      
+      // Check fire rate
+      if (now - tank.lastShotTime < CONFIG.FIRE_RATE) {
+        return;
+      }
+      
+      // Check ammo
+      if (tank.ammo <= 0) {
+        tank.reloading = true;
+        tank.reloadStartTime = now;
+        return;
+      }
+      
+      // Fire!
+      tank.ammo--;
+      tank.lastShotTime = now;
+      
+      // Play shot sound
+      playShotSound(tank.team);
+      
+      const gunLength = CONFIG.TANK_SIZE / 2 + 12;
+      bullets.push({
+        x: tank.x + Math.cos(toRadians(tank.angle)) * gunLength,
+        y: tank.y + Math.sin(toRadians(tank.angle)) * gunLength,
+        angle: tank.angle,
+        team: tank.team,
+        ownerId: tanks.indexOf(tank)
+      });
+      
+      // Auto-reload if empty
+      if (tank.ammo <= 0) {
+        tank.reloading = true;
+        tank.reloadStartTime = now;
+      }
+    }
+
+    function updateBullets() {
+      bullets = bullets.filter(bullet => {
+        // Move bullet
+        bullet.x += Math.cos(toRadians(bullet.angle)) * CONFIG.BULLET_SPEED;
+        bullet.y += Math.sin(toRadians(bullet.angle)) * CONFIG.BULLET_SPEED;
+        
+        // Check boundary
+        if (bullet.x < 0 || bullet.x > canvas.width ||
+            bullet.y < 0 || bullet.y > canvas.height) {
+          return false;
+        }
+        
+        // Check wall collision
+        const hitWall = checkWallCollision(bullet.x, bullet.y, CONFIG.BULLET_SIZE);
+        if (hitWall) {
+          hitWall.health--;
+          explosions.push({ x: bullet.x, y: bullet.y, startTime: Date.now() });
+          if (hitWall.health <= 0) {
+            playBlockDestroySound();
+          }
+          return false;
+        }
+        
+        // Check tank collision
+        for (const tank of tanks) {
+          if (!tank.alive) continue;
+          if (tanks.indexOf(tank) === bullet.ownerId) continue; // Can't hit self
+          if (tank.invulnerable) continue; // Can't hit invulnerable tanks
+          
+          if (distance(bullet.x, bullet.y, tank.x, tank.y) < CONFIG.TANK_SIZE / 2 + CONFIG.BULLET_SIZE) {
+            tank.health--;
+            explosions.push({ x: bullet.x, y: bullet.y, startTime: Date.now() });
+            
+            if (tank.health <= 0) {
+              const wasPlayer = tank.isPlayer;
+              tank.alive = false;
+              tank.isPlayer = false; // Clear player flag on destroyed tank
+              explosions.push({ x: tank.x, y: tank.y, startTime: Date.now() });
+              playTankDestroySound();
+              
+              // If player's tank was destroyed, transfer control to existing ally (not spawned tank)
+              if (wasPlayer && tank.team === 'red') {
+                const allyTank = tanks.find(t => t.team === 'red' && t.alive && t !== tank);
+                if (allyTank) {
+                  allyTank.isPlayer = true;
+                }
+              }
+              
+              // Queue respawn if reserves available - always spawn as AI controlled
+              if (reserves[tank.team] > 0) {
+                reserves[tank.team]--;
+                pendingSpawns.push({
+                  team: tank.team,
+                  spawnTime: Date.now() + CONFIG.SPAWN_DELAY,
+                  isPlayerControlled: false // New spawns are AI controlled
+                });
+              }
+            }
+            
+            return false;
+          }
+        }
+        
+        return true;
+      });
+    }
+
+    function updatePlayerTank(tank) {
+      if (!tank.alive) return;
+      
+      // Rotation
+      if (keys['a'] || keys['A']) {
+        tank.angle -= CONFIG.TANK_ROTATION_SPEED;
+      }
+      if (keys['d'] || keys['D']) {
+        tank.angle += CONFIG.TANK_ROTATION_SPEED;
+      }
+      tank.angle = normalizeAngle(tank.angle);
+      
+      // Movement
+      let moveX = 0, moveY = 0;
+      if (keys['w'] || keys['W']) {
+        moveX = Math.cos(toRadians(tank.angle)) * CONFIG.TANK_SPEED;
+        moveY = Math.sin(toRadians(tank.angle)) * CONFIG.TANK_SPEED;
+      }
+      if (keys['s'] || keys['S']) {
+        moveX = -Math.cos(toRadians(tank.angle)) * CONFIG.TANK_SPEED;
+        moveY = -Math.sin(toRadians(tank.angle)) * CONFIG.TANK_SPEED;
+      }
+      
+      if (moveX !== 0 || moveY !== 0) {
+        const newX = tank.x + moveX;
+        const newY = tank.y + moveY;
+        if (!checkTankCollision(tank, newX, newY)) {
+          tank.x = newX;
+          tank.y = newY;
+        }
+      }
+      
+      // Firing
+      if (keys[' ']) {
+        fireBullet(tank);
+      }
+    }
+
+    function updateAITank(tank) {
+      if (!tank.alive) return;
+      
+      const now = Date.now();
+      
+      // Find nearest enemy
+      let nearestEnemy = null;
+      let nearestDist = Infinity;
+      
+      for (const other of tanks) {
+        if (!other.alive || other.team === tank.team) continue;
+        const dist = distance(tank.x, tank.y, other.x, other.y);
+        if (dist < nearestDist) {
+          nearestDist = dist;
+          nearestEnemy = other;
+        }
+      }
+      
+      if (!nearestEnemy) return;
+      
+      // AI decision making with reaction time
+      if (now - tank.aiLastDecision < CONFIG.AI_REACTION_TIME) return;
+      tank.aiLastDecision = now;
+      
+      // Calculate angle to enemy
+      const targetAngle = angleTo(tank.x, tank.y, nearestEnemy.x, nearestEnemy.y);
+      let angleDiff = normalizeAngle(targetAngle - tank.angle);
+      if (angleDiff > 180) angleDiff -= 360;
+      
+      // Rotate towards enemy
+      if (Math.abs(angleDiff) > CONFIG.TANK_ROTATION_SPEED) {
+        tank.angle += angleDiff > 0 ? CONFIG.TANK_ROTATION_SPEED : -CONFIG.TANK_ROTATION_SPEED;
+        tank.angle = normalizeAngle(tank.angle);
+      }
+      
+      // Check line of sight and fire
+      const hasLOS = hasLineOfSight(tank.x, tank.y, nearestEnemy.x, nearestEnemy.y);
+      
+      if (hasLOS && nearestDist < CONFIG.AI_FIRE_RANGE && Math.abs(angleDiff) < 15) {
+        if (Math.random() < CONFIG.AI_ACCURACY) {
+          fireBullet(tank);
+        }
+      }
+      
+      // Movement - approach if no LOS or too far, with some randomness
+      if (Math.random() < CONFIG.AI_AGGRESSION) {
+        if (!hasLOS || nearestDist > CONFIG.AI_FIRE_RANGE * 0.7) {
+          const moveAngle = hasLOS ? tank.angle : targetAngle;
+          const newX = tank.x + Math.cos(toRadians(moveAngle)) * CONFIG.TANK_SPEED;
+          const newY = tank.y + Math.sin(toRadians(moveAngle)) * CONFIG.TANK_SPEED;
+          
+          if (!checkTankCollision(tank, newX, newY)) {
+            tank.x = newX;
+            tank.y = newY;
+          } else {
+            // Try to navigate around obstacle
+            const altAngle = moveAngle + (Math.random() > 0.5 ? 45 : -45);
+            const altX = tank.x + Math.cos(toRadians(altAngle)) * CONFIG.TANK_SPEED;
+            const altY = tank.y + Math.sin(toRadians(altAngle)) * CONFIG.TANK_SPEED;
+            if (!checkTankCollision(tank, altX, altY)) {
+              tank.x = altX;
+              tank.y = altY;
+            }
+          }
+        }
+      }
+    }
+
+    function processPendingSpawns() {
+      const now = Date.now();
+      
+      pendingSpawns = pendingSpawns.filter(spawn => {
+        if (now >= spawn.spawnTime) {
+          // Spawn the tank
+          const spawnPoint = SPAWN_POINTS[spawn.team];
+          const newTank = createTank(
+            spawnPoint.x,
+            spawnPoint.y,
+            spawnPoint.angle,
+            spawn.team,
+            spawn.isPlayerControlled,
+            true // has spawn protection
+          );
+          tanks.push(newTank);
+          return false; // Remove from pending
+        }
+        return true; // Keep in pending
+      });
+    }
+
+    function checkGameOver() {
+      // Process any pending spawns first
+      processPendingSpawns();
+      
+      const redAlive = tanks.filter(t => t.team === 'red' && t.alive).length;
+      const blueAlive = tanks.filter(t => t.team === 'blue' && t.alive).length;
+      const redPending = pendingSpawns.filter(s => s.team === 'red').length;
+      const bluePending = pendingSpawns.filter(s => s.team === 'blue').length;
+      
+      // Update status display
+      document.getElementById('redActive').textContent = `Active: ${'●'.repeat(redAlive)}${'○'.repeat(2 - Math.min(redAlive, 2))}`;
+      document.getElementById('redReserve').textContent = `Reserve: ${'●'.repeat(reserves.red + redPending)}${'○'.repeat(CONFIG.RESERVE_TANKS - reserves.red - redPending)}`;
+      document.getElementById('blueActive').textContent = `Active: ${'●'.repeat(blueAlive)}${'○'.repeat(2 - Math.min(blueAlive, 2))}`;
+      document.getElementById('blueReserve').textContent = `Reserve: ${'●'.repeat(reserves.blue + bluePending)}${'○'.repeat(CONFIG.RESERVE_TANKS - reserves.blue - bluePending)}`;
+      
+      // Update game timer display
+      updateTimerDisplay();
+      
+      // Game ends when a team has no alive tanks, no pending spawns, and no reserves
+      const redTotal = redAlive + redPending + reserves.red;
+      const blueTotal = blueAlive + bluePending + reserves.blue;
+      
+      if (redTotal === 0) {
+        gameState = 'blueWins';
+      } else if (blueTotal === 0) {
+        gameState = 'redWins';
+        // Record best time for red wins
+        const finalTime = getElapsedTime();
+        if (bestTime === null || finalTime < bestTime) {
+          bestTime = finalTime;
+          document.getElementById('bestTime').textContent = formatTime(bestTime);
+        }
+      }
+    }
+    
+    function getElapsedTime() {
+      return Date.now() - gameStartTime - totalPausedDuration;
+    }
+    
+    function formatTime(ms) {
+      const totalSeconds = Math.floor(ms / 1000);
+      const minutes = Math.floor(totalSeconds / 60);
+      const seconds = totalSeconds % 60;
+      return `${minutes.toString().padStart(2, '0')}:${seconds.toString().padStart(2, '0')}`;
+    }
+    
+    function updateTimerDisplay() {
+      const elapsed = getElapsedTime();
+      document.getElementById('gameTimer').textContent = formatTime(elapsed);
+    }
+
+    // =============================================================================
+    // MAIN GAME LOOP
+    // =============================================================================
+
+    function drawPauseScreen() {
+      ctx.fillStyle = 'rgba(0, 0, 0, 0.7)';
+      ctx.fillRect(0, 0, canvas.width, canvas.height);
+      
+      ctx.textAlign = 'center';
+      ctx.font = 'bold 36px monospace';
+      ctx.fillStyle = '#fbbf24';
+      ctx.fillText('PAUSED', canvas.width / 2, canvas.height / 2 - 20);
+      
+      ctx.font = '18px monospace';
+      ctx.fillStyle = '#fff';
+      ctx.fillText('Press C to continue', canvas.width / 2, canvas.height / 2 + 30);
+      
+      ctx.textAlign = 'left';
+    }
+
+    function gameLoop() {
+      // Clear
+      ctx.clearRect(0, 0, canvas.width, canvas.height);
+      
+      // Draw
+      drawArena();
+      drawWalls();
+      drawBullets();
+      tanks.forEach(drawTank);
+      drawExplosions();
+      
+      if (gameState === 'playing') {
+        // Update
+        tanks.forEach(tank => {
+          if (tank.isPlayer) {
+            updatePlayerTank(tank);
+          } else {
+            updateAITank(tank);
+          }
+        });
+        
+        updateBullets();
+        checkGameOver();
+      } else if (gameState === 'paused') {
+        drawPauseScreen();
+      } else {
+        drawGameOver();
+      }
+      
+      requestAnimationFrame(gameLoop);
+    }
+
+    // =============================================================================
+    // INPUT HANDLING
+    // =============================================================================
+
+    function handleKeyDown(e) {
+      keys[e.key] = true;
+      
+      if (e.key === ' ') {
+        e.preventDefault();
+      }
+      
+      // Continue from pause with C key
+      if ((e.key === 'c' || e.key === 'C') && gameState === 'paused') {
+        resumeGame();
+      }
+      
+      // Switch tank control with P key
+      if ((e.key === 'p' || e.key === 'P') && gameState === 'playing') {
+        switchTankControl();
+      }
+      
+      if ((e.key === 'r' || e.key === 'R') && (gameState === 'redWins' || gameState === 'blueWins')) {
+        initGame();
+      }
+    }
+    
+    function switchTankControl() {
+      const redTanks = tanks.filter(t => t.team === 'red' && t.alive);
+      if (redTanks.length < 2) return; // Need at least 2 tanks to switch
+      
+      const currentPlayer = redTanks.find(t => t.isPlayer);
+      const otherTank = redTanks.find(t => !t.isPlayer);
+      
+      if (currentPlayer && otherTank) {
+        currentPlayer.isPlayer = false;
+        otherTank.isPlayer = true;
+      }
+    }
+
+    function handleKeyUp(e) {
+      keys[e.key] = false;
+    }
+
+    function pauseGame() {
+      if (gameState === 'playing') {
+        gameState = 'paused';
+        pausedTime = Date.now();
+        keys = {}; // Clear keys to prevent stuck movement
+      }
+    }
+    
+    function resumeGame() {
+      if (gameState === 'paused') {
+        // Adjust spawn times to account for pause duration
+        const pauseDuration = Date.now() - pausedTime;
+        totalPausedDuration += pauseDuration;
+        pendingSpawns.forEach(spawn => {
+          spawn.spawnTime += pauseDuration;
+        });
+        // Adjust tank spawn protection timers
+        tanks.forEach(tank => {
+          if (tank.invulnerable) {
+            tank.spawnTime += pauseDuration;
+          }
+        });
+        gameState = 'playing';
+      }
+    }
+
+    function handleBlur() {
+      // Pause game and clear keys when window/canvas loses focus
+      keys = {};
+      pauseGame();
+    }
+
+    window.addEventListener('keydown', handleKeyDown);
+    window.addEventListener('keyup', handleKeyUp);
+    window.addEventListener('blur', handleBlur);
+
+    canvas.setAttribute('tabindex', '0');
+    canvas.addEventListener('click', () => {
+      canvas.focus();
+      initAudio(); // Initialize audio on first click
+    });
+    canvas.addEventListener('blur', handleBlur);
+
+    // =============================================================================
+    // INITIALIZATION
+    // =============================================================================
+
+    function initGame() {
+      gameState = 'playing';
+      bullets = [];
+      explosions = [];
+      generateArena();
+      initTanks();
+      // Reset timer
+      gameStartTime = Date.now();
+      totalPausedDuration = 0;
+      document.getElementById('gameTimer').textContent = '00:00';
+    }
+
+    initGame();
+    gameLoop();
+  </script>
+</body>
+</html>
